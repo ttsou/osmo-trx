@@ -52,7 +52,7 @@ extern const BitVector gDummyBurst;
 
 /** Random access burst synch. sequence */
 extern const BitVector gRACHSynchSequence;
-
+extern const BitVector gSCHSynchSequence;
 
 /**@name Modulus operations for frame numbers. */
 //@{

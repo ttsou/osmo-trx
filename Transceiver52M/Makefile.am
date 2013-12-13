@@ -56,7 +56,8 @@ COMMON_SOURCES = \
 	radioClock.cpp \
 	sigProcLib.cpp \
 	signalVector.cpp \
-	Transceiver.cpp
+	Transceiver.cpp \
+	socket.c
 
 libtransceiver_la_SOURCES = \
 	$(COMMON_SOURCES) \

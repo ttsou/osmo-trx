@@ -33,6 +33,7 @@ extern "C" {
 #include "convolve.h"
 #include "scale.h"
 #include "mult.h"
+#include "socket.h"
 }
 
 using namespace GSM;
@@ -111,6 +112,7 @@ struct PulseSequence {
 
 CorrelationSequence *gMidambles[] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
 CorrelationSequence *gRACHSequence = NULL;
+CorrelationSequence *gSCHSequence = NULL;
 PulseSequence *GSMPulse = NULL;
 PulseSequence *GSMPulse1 = NULL;
 
@@ -131,6 +133,7 @@ void sigProcLibDestroy()
   delete GMSKRotation1;
   delete GMSKReverseRotation1;
   delete gRACHSequence;
+  delete gSCHSequence;
   delete GSMPulse;
   delete GSMPulse1;
 
@@ -139,6 +142,7 @@ void sigProcLibDestroy()
   GMSKReverseRotationN = NULL;
   GMSKReverseRotation1 = NULL;
   gRACHSequence = NULL;
+  gSCHSequence = NULL;
   GSMPulse = NULL;
   GSMPulse1 = NULL;
 }
@@ -1274,6 +1278,68 @@ release:
   return status;
 }
 
+bool generateSCHSequence(int sps)
+{
+  bool status = true;
+  float toa;
+  complex *data = NULL;
+  signalVector *autocorr = NULL;
+  signalVector *seq0 = NULL, *seq1 = NULL, *_seq1 = NULL;
+
+  delete gSCHSequence;
+
+  seq0 = modulateBurst(gSCHSynchSequence, 0, sps, false);
+  if (!seq0)
+    return false;
+
+  seq1 = modulateBurst(gSCHSynchSequence, 0, sps, true);
+  if (!seq1) {
+    status = false;
+    goto release;
+  }
+
+  conjugateVector(*seq1);
+
+  /* For SSE alignment, reallocate the midamble sequence on 16-byte boundary */
+  data = (complex *) convolve_h_alloc(seq1->size());
+  _seq1 = new signalVector(data, 0, seq1->size());
+  _seq1->setAligned(true);
+  memcpy(_seq1->begin(), seq1->begin(), seq1->size() * sizeof(complex));
+
+  autocorr = convolve(seq0, _seq1, autocorr, NO_DELAY);
+  if (!autocorr) {
+    status = false;
+    goto release;
+  }
+
+  gSCHSequence = new CorrelationSequence;
+  gSCHSequence->sequence = _seq1;
+  gSCHSequence->buffer = data;
+  gSCHSequence->gain = peakDetect(*autocorr, &toa, NULL);
+
+  /* For 1 sps only
+   *     (Half of correlation length - 1) + midpoint of pulse shaping filer
+   *     20.5 = (40 / 2 - 1) + 1.5
+   */
+  if (sps == 1)
+    gSCHSequence->toa = toa - 32.5;
+  else
+    gSCHSequence->toa = 0.0;
+
+release:
+  delete autocorr;
+  delete seq0;
+  delete seq1;
+
+  if (!status) {
+    delete _seq1;
+    free(data);
+    gSCHSequence = NULL;
+  }
+
+  return status;
+}
+
 static float computePeakRatio(signalVector *corr,
                               int sps, float toa, complex amp)
 {
@@ -1342,6 +1408,9 @@ static int detectBurst(signalVector &burst,
                 CUSTOM, start, len, sps, 0)) {
     return -1;
   }
+
+  lte_dsock_send((float *) burst.begin(), burst.size(), 0);
+  lte_dsock_send((float *) corr.begin(), corr.size(), 1);
 
   /* Peak detection - place restrictions at correlation edges */
   *amp = fastPeakDetect(corr, toa);
@@ -1420,6 +1489,54 @@ int detectRACHBurst(signalVector &rxBurst,
     *toa = _toa - head * sps;
   if (amp)
     *amp = _amp;
+
+  return 1;
+}
+
+int detectSCHBurst(signalVector &rxBurst,
+		   float thresh,
+		   int sps,
+		   complex *amp,
+		   float *toa)
+{
+  int rc, start, target, head, tail, len;
+  float _toa;
+  complex _amp;
+  signalVector *corr;
+  CorrelationSequence *sync = gSCHSequence;
+
+  if ((sps != 1) && (sps != 4))
+    return -1;
+
+  target = 3 + 39 + 64;
+  head = 40;
+  tail = 40;
+
+  start = (target - head) * sps - 1;
+  len = (head + tail) * sps;
+  corr = new signalVector(len);
+
+  rc = detectBurst(rxBurst, *corr, sync,
+                   thresh, sps, &_amp, &_toa, start, len);
+  delete corr;
+
+  if (rc < 0) {
+    return -1;
+  } else if (!rc) {
+    if (amp)
+      *amp = 0.0f;
+    if (toa)
+      *toa = 0.0f;
+    return 0;
+  }
+
+  /* Subtract forward search bits from delay */
+  if (toa)
+    *toa = _toa - head * sps;
+  if (amp)
+    *amp = _amp * -1.0;
+
+  std::cout << "toa " << *toa << std::endl;
 
   return 1;
 }
@@ -1523,6 +1640,8 @@ SoftVector *demodulateBurst(signalVector &rxBurst, int sps,
   } else {
      dec = delay;
   }
+
+  lte_dsock_send((float *) dec->begin(), dec->size(), 2);
 
   vectorSlicer(dec);
 
@@ -1713,6 +1832,11 @@ bool sigProcLibSetup(int sps)
     GSMPulse = generateGSMPulse(sps, 2);
 
   if (!generateRACHSequence(1)) {
+    sigProcLibDestroy();
+    return false;
+  }
+
+  if (!generateSCHSequence(1)) {
     sigProcLibDestroy();
     return false;
   }

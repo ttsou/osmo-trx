@@ -23,6 +23,7 @@
 
 #include <stdio.h>
 #include "Transceiver.h"
+#include "SCHDetect.h"
 #include <Logger.h>
 
 #ifdef HAVE_CONFIG_H
@@ -74,6 +75,82 @@ void TransceiverState::init(size_t slot, signalVector *burst)
   for (int i = 0; i < 102; i++)
     fillerTable[i][slot] = new signalVector(*burst);
 }
+
+int getFN(int t1, int t2, int t3p)
+{
+        if ((t1 < 0) || (t2 < 0) || (t3p < 0))
+                return -1;
+        int tt;
+        int t3 = t3p * 10 + 1;
+
+        if (t3 < t2)
+                tt = (t3 + 26) - t2;
+        else
+                tt = (t3 - t2) % 26;
+
+        return t1 * 51 * 26 + tt * 51 + t3;
+}
+
+namespace GSM {
+        SCHL1Decoder::SCHL1Decoder()
+                : mParity(0x0575, 10, 25), mU(25 + 10 + 4), mD(mU.head(25)),
+                  mE(78), mE1(mE.segment(0, 39)), mE2(mE.segment(39, 39)),
+                  mNCC(-1), mBCC(-1), mT1(-1), mT2(-1), mT3p(-1)
+        {
+        }
+
+        void SCHL1Decoder::reset()
+        {
+                mNCC = -1;
+                mBCC = -1;
+                mT1 = -1;
+                mT2 = -1;
+                mT3p = -1;
+        }
+
+        int SCHL1Decoder::writeLowSide(SoftVector& burst)
+        {
+		int fn = 0;
+                burst.segment(3, 39).copyToSegment(mE1);
+                burst.segment(106, 39).copyToSegment(mE2);
+
+                mE.decode(mVCoder, mU);
+
+                unsigned sentParity = ~mU.peekField(25, 10);
+                unsigned checkParity = mD.parity(mParity);
+                unsigned parity = (sentParity ^ checkParity) & 0x3ff;
+
+                if (parity == 0) {
+                        mD.LSB8MSB();
+                        mNCC = mD.peekField(0, 3);
+                        mBCC = mD.peekField(3, 3);
+                        mT1 = mD.peekField(6, 11);
+                        mT2 = mD.peekField(17, 5);
+                        mT3p = mD.peekField(22, 3);
+#if 0
+                        std::cout << "Original: " << burst << std::endl;
+                        std::cout << "Decoded: " << mU << std::endl;
+                        std::cout << " BCC: " << mBCC;
+                        std::cout << " NCC: " << mNCC;
+                        std::cout << " T1: " << mT1;
+                        std::cout << " T2: ";
+                        std::cout.width(2);
+                        std::cout << mT2 << " T3p: ";
+                        std::cout << mT3p << std::endl;
+#endif
+			std::cout << "SCH FN: " << getFN(mT1, mT2, mT3p)
+				  << std::endl;
+			fn = getFN(mT1, mT2, mT3p);
+	                return fn;
+                } else {
+                        LOG(ERR) << "SCH Decoding Failed\n";
+                }
+
+		return 0;
+        }
+};
+
+SCHL1Decoder SCHDecoder;
 
 Transceiver::Transceiver(int wBasePort,
 			 const char *TRXAddress,
@@ -347,6 +424,15 @@ bool Transceiver::detectRACH(TransceiverState *state,
   return detectRACHBurst(burst, threshold, mSPSRx, &amp, &toa);
 }
 
+bool Transceiver::detectSCH(TransceiverState *state,
+                            signalVector &burst,
+                            complex &amp, float &toa)
+{
+  float threshold = 6.0;
+
+  return detectSCHBurst(burst, threshold, mSPSRx, &amp, &toa);
+}
+
 /*
  * Detect normal burst training sequence midamble. Update equalization
  * state information and channel estimate if necessary. Equalization
@@ -442,10 +528,13 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, int &RSSI,
   GSM::Time time = radio_burst->getTime();
   CorrType type = expectedCorrType(time, chan);
 
+#if 0
   if ((type == OFF) || (type == IDLE)) {
     delete radio_burst;
     return NULL;
   }
+#endif
+  type = SCH;
 
   /* Select the diversity channel with highest energy */
   for (size_t i = 0; i < radio_burst->chans(); i++) {
@@ -471,8 +560,10 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, int &RSSI,
   /* Detect normal or RACH bursts */
   if (type == TSC)
     success = detectTSC(state, *burst, amp, toa, time);
-  else
+  else if (type == RACH)
     success = detectRACH(state, *burst, amp, toa);
+  else
+    success = detectSCH(state, *burst, amp, toa);
 
   if (!success) {
     state->mNoises.insert(avg);
@@ -484,14 +575,24 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, int &RSSI,
   if (equalize && (type != TSC))
     equalize = false;
 
-  if (avg - state->mNoiseLev > 0.0)
-    bits = demodulate(state, *burst, amp, toa, time.TN(), equalize);
+  bits = demodulate(state, *burst, amp, toa, time.TN(), equalize);
 
   wTime = time;
   RSSI = (int) floor(20.0 * log10(rxFullScale / avg));
   timingOffset = (int) round(toa * 256.0 / mSPSRx);
 
   delete radio_burst;
+
+  if (bits) {
+    int fn = SCHDecoder.writeLowSide(*bits);
+    if (fn) {
+      std::cout << "TN: " << time.TN() << " Sub: "
+                << time.FN() - fn << std::endl;
+    }
+  }
+
+  delete bits;
+  return NULL;
 
   return bits;
 }
@@ -513,7 +614,6 @@ void Transceiver::reset()
     mTxPriorityQueues[i].clear();
 }
 
-  
 void Transceiver::driveControl(size_t chan)
 {
   int MAX_PACKET_LENGTH = 100;
@@ -747,14 +847,14 @@ void Transceiver::driveReceiveFIFO(size_t chan)
 
   rxBurst = pullRadioVector(burstTime, RSSI, TOA, chan);
 
-  if (rxBurst) { 
+  if (rxBurst) {
 
-    LOG(DEBUG) << "burst parameters: "
+    std::cout << "burst parameters: "
 	  << " time: " << burstTime
 	  << " RSSI: " << RSSI
 	  << " TOA: "  << TOA
-	  << " bits: " << *rxBurst;
-    
+	  << " bits: " << *rxBurst << std::endl;
+
     char burstString[gSlotLen+10];
     burstString[0] = burstTime.TN();
     for (int i = 0; i < 4; i++)

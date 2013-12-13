@@ -957,6 +957,8 @@ bool uhd_device::updateAlignment(TIMESTAMP timestamp)
 
 bool uhd_device::setTxFreq(double wFreq, size_t chan)
 {
+	wFreq = 880.4e6;
+
 	if (chan >= tx_freqs.size()) {
 		LOG(ALERT) << "Requested non-existent channel " << chan;
 		return false;
@@ -971,6 +973,9 @@ bool uhd_device::setTxFreq(double wFreq, size_t chan)
 
 bool uhd_device::setRxFreq(double wFreq, size_t chan)
 {
+	wFreq = 960e6;
+//	wFreq = 880.4e6;
+
 	if (chan >= rx_freqs.size()) {
 		LOG(ALERT) << "Requested non-existent channel " << chan;
 		return false;

@@ -115,6 +115,7 @@ private:
     OFF,               ///< timeslot is off
     TSC,	       ///< timeslot should contain a normal burst
     RACH,	       ///< timeslot should contain an access burst
+    SCH,
     IDLE	       ///< timeslot is an idle (or dummy) burst
   } CorrType;
 
@@ -142,6 +143,10 @@ private:
   bool detectRACH(TransceiverState *state,
                   signalVector &burst,
                   complex &amp, float &toa);
+
+  bool detectSCH(TransceiverState *state,
+                 signalVector &burst,
+                 complex &amp, float &toa);
 
   /** Detect normal bursts */
   bool detectTSC(TransceiverState *state,

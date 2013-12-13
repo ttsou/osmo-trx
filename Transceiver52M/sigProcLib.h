@@ -158,6 +158,7 @@ bool generateMidamble(int sps, int tsc);
         @return Success.
 */
 bool generateRACHSequence(int sps);
+bool generateSCHSequence(int sps);
 
 /**
         Energy detector, checks to see if received burst energy is above a threshold.
@@ -186,6 +187,12 @@ int detectRACHBurst(signalVector &rxBurst,
                     int sps,
                     complex *amplitude,
                     float* TOA);
+
+int detectSCHBurst(signalVector &rxBurst,
+                   float detectThreshold,
+                   int sps,
+                   complex *amplitude,
+                   float* TOA);
 
 /**
         Normal burst correlator, detector, channel estimator.
