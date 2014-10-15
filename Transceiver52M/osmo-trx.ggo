@@ -1,0 +1,14 @@
+# call me:
+# gengetopt -i osmo-trx.ggo --file-name osmo-trx-options
+package "OsmoTRX"
+
+option	"logging"	l	"Logging level"					values="EMERG","ALERT","CRT","ERR","WARNING","NOTICE","INFO","DEBUG" default="NOTICE" optional
+option	"port"		p	"Base port number"				int	typestr="PORT"	 		  		     default="5700"   optional
+option	"channels"	c	"Number of ARFCN channels"			int						  		     default="1"      optional
+option	"samples"	s	"Samples-per-symbol (1 or 4)"			int						  		     default="4"      optional
+option	"diversity"	d	"Enable dual channel diversity receiver"	flag						  		     off
+option	"extref"	x	"Enable external 10 MHz reference"		flag						  		     off
+option	"filler"	f	"Enable C0 filler table"			flag						  		     off
+option	"address"	i	"IP address of GSM core"			string	typestr="IP"					  		     default="127.0.0.1" optional
+option	"uhd"		a	"UHD device args"				string						  		     optional
+option	"offset"	o	"Set baseband frequency offset"			double						  		     default="0"      optional
