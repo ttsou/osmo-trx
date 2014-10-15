@@ -5,7 +5,7 @@ package "OsmoTRX"
 option	"logging"	l	"Logging level"					values="EMERG","ALERT","CRT","ERR","WARNING","NOTICE","INFO","DEBUG" default="NOTICE" optional
 option	"port"		p	"Base port number"				int	typestr="PORT"	 		  		     default="5700"   optional
 option	"channels"	c	"Number of ARFCN channels"			int						  		     default="1"      optional
-option	"samples"	s	"Samples-per-symbol (1 or 4)"			int						  		     default="4"      optional
+option	"samples"	s	"Samples-per-symbol (1 or 4)"			int						  		     default="4"      optional details="Samples-per-symbol for downlink path. 4 - Uses precision modulator (more computation, less distortion). 1 - Uses minimized modulator (less computation, more distortion). Other values are invalid. Receive path (uplink) is always downsampled to 1 sps. Default to 4 sps which is best for all cases except for ARM and non-SIMD enabled architectures."
 option	"diversity"	d	"Enable dual channel diversity receiver"	flag						  		     off
 option	"extref"	x	"Enable external 10 MHz reference"		flag						  		     off
 option	"filler"	f	"Enable C0 filler table"			flag						  		     off

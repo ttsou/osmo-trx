@@ -33,22 +33,6 @@
 #include <Logger.h>
 #include <Configuration.h>
 
-/* Samples-per-symbol for downlink path
- *     4 - Uses precision modulator (more computation, less distortion)
- *     1 - Uses minimized modulator (less computation, more distortion)
- *
- *     Other values are invalid. Receive path (uplink) is always
- *     downsampled to 1 sps. Default to 4 sps for all cases except for
- *     ARM and non-SIMD enabled architectures.
- *
- *     N. B: Is not used in the gengetopt - specify explicitly if use ARM
- */
-#if defined(HAVE_NEON) || !defined(HAVE_SSE3)
-#define DEFAULT_SPS		1
-#else
-#define DEFAULT_SPS		4
-#endif
-
 struct trx_config {
 	std::string log_level;
 	std::string addr;
