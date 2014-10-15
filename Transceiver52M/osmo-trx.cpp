@@ -32,7 +32,7 @@
 #include <GSMCommon.h>
 #include <Logger.h>
 #include <Configuration.h>
-ConfigurationTable gConfig; // FIXME: removing that cause linker error with Logger
+
 /* Samples-per-symbol for downlink path
  *     4 - Uses precision modulator (more computation, less distortion)
  *     1 - Uses minimized modulator (less computation, more distortion)

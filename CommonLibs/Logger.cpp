@@ -38,10 +38,6 @@
 
 using namespace std;
 
-// Reference to a global config table, used all over the system.
-extern ConfigurationTable gConfig;
-
-
 /**@ The global alarms table. */
 //@{
 Mutex           alarmsLock;
@@ -90,35 +86,6 @@ int levelStringToInt(const string& name)
 	return -1;
 }
 
-/** Given a string, return the corresponding level name. */
-int lookupLevel(const string& key)
-{
-	string val = gConfig.getStr(key);
-	int level = levelStringToInt(val);
-
-	if (level == -1) {
-		string defaultLevel = gConfig.mSchema["Log.Level"].getDefaultValue();
-		level = levelStringToInt(defaultLevel);
-		_LOG(CRIT) << "undefined logging level (" << key << " = \"" << val << "\") defaulting to \"" << defaultLevel << ".\" Valid levels are: EMERG, ALERT, CRIT, ERR, WARNING, NOTICE, INFO or DEBUG";
-	}
-
-	return level;
-}
-
-
-int getLoggingLevel(const char* filename)
-{
-	// Default level?
-	if (!filename) return lookupLevel("Log.Level");
-
-	// This can afford to be inefficient since it is not called that often.
-	const string keyName = string("Log.Level.") + string(filename);
-	if (gConfig.defines(keyName)) return lookupLevel(keyName);
-	return lookupLevel("Log.Level");
-}
-
-
-
 int gGetLoggingLevel(const char* filename)
 {
 	// This is called a lot and needs to be efficient.
@@ -151,7 +118,7 @@ int gGetLoggingLevel(const char* filename)
 	// FIXME: Figure out why unlock and lock below fix the config table deadlock.
 	// (pat) Probably because getLoggingLevel may call LOG recursively via lookupLevel().
 	sLogCacheLock.unlock();
-	int level = getLoggingLevel(filename);
+	int level = 0;
 	sLogCacheLock.lock();
 	sLogCache.insert(pair<uint64_t,int>(key,level));
 	sLogCacheLock.unlock();
@@ -175,16 +142,6 @@ list<string> gGetLoggerAlarms()
     return ret;
 }
 
-/** Add an alarm to the alarm list. */
-void addAlarm(const string& s)
-{
-    alarmsLock.lock();
-    alarmsList.push_back(s);
-	unsigned maxAlarms = gConfig.getNum("Log.Alarms.Max");
-    while (alarmsList.size() > maxAlarms) alarmsList.pop_front();
-    alarmsLock.unlock();
-}
-
 
 Log::~Log()
 {
@@ -192,7 +149,6 @@ Log::~Log()
 	// Anything at or above LOG_CRIT is an "alarm".
 	// Save alarms in the local list and echo them to stderr.
 	if (mPriority <= LOG_CRIT) {
-		if (sLoggerInited) addAlarm(mStream.str().c_str());
 		cerr << mStream.str() << endl;
 	}
 	// Current logging level was already checked by the macro.
@@ -239,7 +195,7 @@ void gLogInit(const char* name, const char* level, int facility)
 {
 	// Pat added, tired of the syslog facility.
 	// Both the transceiver and OpenBTS use this same facility, but only OpenBTS/OpenNodeB may use this log file:
-	string str = gConfig.getStr("Log.File");
+	string str = "";
 	if (gLogToFile==0 && str.length() && 0==strncmp(gCmdName,"Open",4)) {
 		const char *fn = str.c_str();
 		if (fn && *fn && strlen(fn)>3) {	// strlen because a garbage char is getting in sometimes.
