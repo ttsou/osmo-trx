@@ -100,7 +100,6 @@ int lookupLevel(const string& key)
 		string defaultLevel = gConfig.mSchema["Log.Level"].getDefaultValue();
 		level = levelStringToInt(defaultLevel);
 		_LOG(CRIT) << "undefined logging level (" << key << " = \"" << val << "\") defaulting to \"" << defaultLevel << ".\" Valid levels are: EMERG, ALERT, CRIT, ERR, WARNING, NOTICE, INFO or DEBUG";
-		gConfig.set(key, defaultLevel);
 	}
 
 	return level;
@@ -238,11 +237,6 @@ ostringstream& Log::get()
 
 void gLogInit(const char* name, const char* level, int facility)
 {
-	// Set the level if one has been specified.
-	if (level) {
-		gConfig.set("Log.Level",level);
-	}
-
 	// Pat added, tired of the syslog facility.
 	// Both the transceiver and OpenBTS use this same facility, but only OpenBTS/OpenNodeB may use this log file:
 	string str = gConfig.getStr("Log.File");

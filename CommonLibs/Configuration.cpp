@@ -67,24 +67,13 @@ ConfigurationTable::ConfigurationTable(const char* filename, const char *wCmdNam
 {
 	gLogEarly(LOG_INFO, "opening configuration table from path %s", filename);
 	// Connect to the database.
-	int rc = sqlite3_open(filename,&mDB);
+	int rc = 0;
 	// (pat) When I used malloc here, sqlite3 sporadically crashes.
 	if (wCmdName) {
 		strncpy(gCmdName,wCmdName,18);
 		gCmdName[18] = 0;
 		strcat(gCmdName,":");
 	}
-	if (rc) {
-		gLogEarly(LOG_EMERG, "cannot open configuration database at %s, error message: %s", filename, sqlite3_errmsg(mDB));
-		sqlite3_close(mDB);
-		mDB = NULL;
-		return;
-	}
-	// Create the table, if needed.
-	if (!sqlite3_command(mDB,createConfigTable)) {
-		gLogEarly(LOG_EMERG, "cannot create configuration table in database at %s, error message: %s", filename, sqlite3_errmsg(mDB));
-	}
-
 	// Build CommonLibs schema
 	ConfigurationKey *tmp;
 	tmp = new ConfigurationKey("Log.Alarms.Max","20",
@@ -521,7 +510,6 @@ ConfigurationKeyMap ConfigurationTable::getSimilarKeys(const std::string& snippe
 
 const ConfigurationRecord& ConfigurationTable::lookup(const string& key)
 {
-	assert(mDB);
 	checkCacheAge();
 	// We assume the caller holds mLock.
 	// So it is OK to return a reference into the cache.
@@ -537,8 +525,6 @@ const ConfigurationRecord& ConfigurationTable::lookup(const string& key)
 	// Check the database.
 	// This is more expensive.
 	char *value = NULL;
-	sqlite3_single_lookup(mDB,"CONFIG",
-			"KEYSTRING",key.c_str(),"VALUESTRING",value);
 
 	// value found, cache the result
 	if (value) {
@@ -685,100 +671,6 @@ std::vector<unsigned> ConfigurationTable::getVector(const string& key)
 	return retVal;
 }
 
-
-bool ConfigurationTable::remove(const string& key)
-{
-	assert(mDB);
-
-	ScopedLock lock(mLock);
-	// Clear the cache entry and the database.
-	ConfigurationMap::iterator where = mCache.find(key);
-	if (where!=mCache.end()) mCache.erase(where);
-	// Really remove it.
-	string cmd = "DELETE FROM CONFIG WHERE KEYSTRING=='"+key+"'";
-	return sqlite3_command(mDB,cmd.c_str());
-}
-
-
-
-void ConfigurationTable::find(const string& pat, ostream& os) const
-{
-	// Prepare the statement.
-	string cmd = "SELECT KEYSTRING,VALUESTRING FROM CONFIG WHERE KEYSTRING LIKE \"%" + pat + "%\"";
-	sqlite3_stmt *stmt;
-	if (sqlite3_prepare_statement(mDB,&stmt,cmd.c_str())) return;
-	// Read the result.
-	int src = sqlite3_run_query(mDB,stmt);
-	while (src==SQLITE_ROW) {
-		const char* value = (const char*)sqlite3_column_text(stmt,1);
-		os << sqlite3_column_text(stmt,0) << " ";
-		int len = 0;
-		if (value) {
-			len = strlen(value);
-		}
-		if (len && value) os << value << endl;
-		else os << "(disabled)" << endl;
-		src = sqlite3_run_query(mDB,stmt);
-	}
-	sqlite3_finalize(stmt);
-}
-
-
-ConfigurationRecordMap ConfigurationTable::getAllPairs() const
-{
-	ConfigurationRecordMap tmp;
-
-	// Prepare the statement.
-	string cmd = "SELECT KEYSTRING,VALUESTRING FROM CONFIG";
-	sqlite3_stmt *stmt;
-	if (sqlite3_prepare_statement(mDB,&stmt,cmd.c_str())) return tmp;
-	// Read the result.
-	int src = sqlite3_run_query(mDB,stmt);
-	while (src==SQLITE_ROW) {
-		const char* key = (const char*)sqlite3_column_text(stmt,0);
-		const char* value = (const char*)sqlite3_column_text(stmt,1);
-		if (key && value) {
-			tmp[string(key)] = ConfigurationRecord(value);
-		} else if (key && !value) {
-			tmp[string(key)] = ConfigurationRecord(false);
-		}
-		src = sqlite3_run_query(mDB,stmt);
-	}
-	sqlite3_finalize(stmt);
-
-	return tmp;
-}
-
-bool ConfigurationTable::set(const string& key, const string& value)
-{
-	assert(mDB);
-	ScopedLock lock(mLock);
-	string cmd = "INSERT OR REPLACE INTO CONFIG (KEYSTRING,VALUESTRING,OPTIONAL) VALUES (\"" + key + "\",\"" + value + "\",1)";
-	bool success = sqlite3_command(mDB,cmd.c_str());
-	// Cache the result.
-	if (success) mCache[key] = ConfigurationRecord(value);
-	return success;
-}
-
-bool ConfigurationTable::set(const string& key, long value)
-{
-	char buffer[30];
-	sprintf(buffer,"%ld",value);
-	return set(key,buffer);
-}
-
-
-bool ConfigurationTable::set(const string& key)
-{
-	assert(mDB);
-	ScopedLock lock(mLock);
-	string cmd = "INSERT OR REPLACE INTO CONFIG (KEYSTRING,VALUESTRING,OPTIONAL) VALUES (\"" + key + "\",NULL,1)";
-	bool success = sqlite3_command(mDB,cmd.c_str());
-	if (success) mCache[key] = ConfigurationRecord(true);
-	return success;
-}
-
-
 void ConfigurationTable::checkCacheAge()
 {
 	// mLock is set by caller 
@@ -808,14 +700,6 @@ void ConfigurationTable::purge()
 		mCache.erase(prev);
 	}
 }
-
-
-void ConfigurationTable::setUpdateHook(void(*func)(void *,int ,char const *,char const *,sqlite3_int64))
-{
-	assert(mDB);
-	sqlite3_update_hook(mDB,func,NULL);
-}
-
 
 void ConfigurationTable::setCrossCheckHook(vector<string> (*wCrossCheck)(const string&))
 {

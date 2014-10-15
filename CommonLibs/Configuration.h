@@ -29,8 +29,6 @@
 #define CONFIGURATION_H
 
 
-#include "sqlite3util.h"
-
 #include <assert.h>
 #include <stdlib.h>
 #include <netinet/in.h>
@@ -183,7 +181,6 @@ class ConfigurationTable {
 
 	private:
 
-	sqlite3* mDB;				///< database connection
 	ConfigurationMap mCache;	///< cache of recently access configuration values
 	mutable Mutex mLock;		///< control for multithreaded access to the cache
 	std::vector<std::string> (*mCrossCheck)(const std::string&);	///< cross check callback pointer
@@ -256,32 +253,6 @@ class ConfigurationTable {
 	/** Get length of a vector */
 	unsigned getVectorLength(const std::string &key) 
 		{ return getVector(key).size(); }
-
-	/** Set or change a value in the table.  */
-	bool set(const std::string& key, const std::string& value);
-
-	/** Set or change a value in the table.  */
-	bool set(const std::string& key, long value);
-
-	/** Create an entry in the table, no value though. */
-	bool set(const std::string& key);
-
-	/**
-		Remove an entry from the table.
-		Will not alter required values.
-		@param key The key of the item to be removed.
-		@return true if anything was actually removed.
-	*/
-	bool remove(const std::string& key);
-
-	/** Search the table, dumping to a stream. */
-	void find(const std::string& pattern, std::ostream&) const;
-
-	/** Return all key/value pairs stored in the ConfigurationTable */
-	ConfigurationRecordMap getAllPairs() const;
-
-	/** Define the callback to purge the cache whenever the database changes. */
-	void setUpdateHook(void(*)(void *,int ,char const *,char const *,sqlite3_int64));
 
 	/** Define the callback for cross checking. */
 	void setCrossCheckHook(std::vector<std::string> (*wCrossCheck)(const std::string&));

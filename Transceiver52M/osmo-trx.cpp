@@ -22,6 +22,7 @@
 
 #include "Transceiver.h"
 #include "radioDevice.h"
+#include "osmo-trx-options.h"
 
 #include <time.h>
 #include <signal.h>
@@ -31,7 +32,7 @@
 #include <GSMCommon.h>
 #include <Logger.h>
 #include <Configuration.h>
-
+ConfigurationTable gConfig; // FIXME: removing that cause linker error with Logger
 /* Samples-per-symbol for downlink path
  *     4 - Uses precision modulator (more computation, less distortion)
  *     1 - Uses minimized modulator (less computation, more distortion)
@@ -39,24 +40,14 @@
  *     Other values are invalid. Receive path (uplink) is always
  *     downsampled to 1 sps. Default to 4 sps for all cases except for
  *     ARM and non-SIMD enabled architectures.
+ *
+ *     N. B: Is not used in the gengetopt - specify explicitly if use ARM
  */
 #if defined(HAVE_NEON) || !defined(HAVE_SSE3)
 #define DEFAULT_SPS		1
 #else
 #define DEFAULT_SPS		4
 #endif
-
-/* Default configuration parameters
- *     Note that these values are only used if the particular key does not
- *     exist in the configuration database. IP port and address values will
- *     typically be overwritten by the OpenBTS.db values. Other values will
- *     not be in the database by default.
- */
-#define DEFAULT_TRX_PORT	5700
-#define DEFAULT_TRX_IP		"127.0.0.1"
-#define DEFAULT_EXTREF		false
-#define DEFAULT_DIVERSITY	false
-#define DEFAULT_CHANS		1
 
 struct trx_config {
 	std::string log_level;
@@ -71,43 +62,7 @@ struct trx_config {
 	double offset;
 };
 
-ConfigurationTable gConfig;
-
-volatile bool gshutdown = false;
-
-/* Run sanity check on configuration table
- *     The global table constructor cannot provide notification in the
- *     event of failure. Make sure that we can access the database,
- *     write to it, and that it contains the bare minimum required keys.
- */
-bool testConfig()
-{
-	int val = 9999;
-	std::string test = "asldfkjsaldkf";
-	const char *key = "Log.Level";
-
-	/* Attempt to query */
-	try {
-		gConfig.getStr(key);
-	} catch (...) {
-		std::cerr << std::endl;
-		std::cerr << "Config: Failed query required key " << key
-			  << std::endl;
-		return false;
-	}
-
-	/* Attempt to set a test value in the global config */
-	if (!gConfig.set(test, val)) {
-		std::cerr << std::endl;
-		std::cerr << "Config: Failed to set test key" << std::endl;
-		return false;
-	} else {
-		gConfig.remove(test);
-	}
-
-	return true;
-}
-
+volatile bool gshutdown = false; // FIXME: OpenBTS leftovers
 
 /* Setup configuration values
  *     Don't query the existence of the Log.Level because it's a
@@ -116,57 +71,22 @@ bool testConfig()
  *     can survive without and use default values if the database entries
  *     are empty.
  */
-bool trx_setup_config(struct trx_config *config)
+bool trx_setup_config(struct trx_config *config, gengetopt_args_info *args_info)
 {
-	std::string refstr, fillstr, divstr;
-
-	if (!testConfig())
-		return false;
-
-	if (config->log_level == "")
-		config->log_level = gConfig.getStr("Log.Level");
-
-	if (!config->port) {
-		if (gConfig.defines("TRX.Port"))
-			config->port = gConfig.getNum("TRX.Port");
-		else
-			config->port = DEFAULT_TRX_PORT;
-	}
-
-	if (config->addr == "") {
-		if (gConfig.defines("TRX.IP"))
-			config->addr = gConfig.getStr("TRX.IP");
-		else
-			config->addr = DEFAULT_TRX_IP;
-	}
-
-	if (!config->extref) {
-		if (gConfig.defines("TRX.Reference"))
-			config->extref = gConfig.getNum("TRX.Reference");
-		else
-			config->extref = DEFAULT_EXTREF;
-	}
-
-	if (!config->diversity) {
-		if (gConfig.defines("TRX.Diversity"))
-			config->diversity = gConfig.getNum("TRX.Diversity");
-		else
-			config->diversity = DEFAULT_DIVERSITY;
-	}
-
-	if (!config->sps)
-		config->sps = DEFAULT_SPS;
-
-	if (!config->chans)
-		config->chans = DEFAULT_CHANS;
+	config->log_level = args_info->logging_arg;
+	config->port = args_info->port_arg;
+	config->addr = args_info->address_arg;
+	config->extref = args_info->extref_given;
+	config->diversity = args_info->diversity_given;
+	config->sps = args_info->samples_arg;
+	config->chans = args_info->channels_arg;
+	config->offset = args_info->offset_arg;
+	if (args_info->uhd_given)
+	    config->dev_args = args_info->uhd_arg;
 
 	/* Diversity only supported on 2 channels */
 	if (config->diversity)
 		config->chans = 2;
-
-	refstr = config->extref ? "Enabled" : "Disabled";
-	fillstr = config->filler ? "Enabled" : "Disabled";
-	divstr = config->diversity ? "Enabled" : "Disabled";
 
 	std::ostringstream ost("");
 	ost << "Config Settings" << std::endl;
@@ -176,9 +96,9 @@ bool trx_setup_config(struct trx_config *config)
 	ost << "   TRX Address............. " << config->addr << std::endl;
 	ost << "   Channels................ " << config->chans << std::endl;
 	ost << "   Samples-per-Symbol...... " << config->sps << std::endl;
-	ost << "   External Reference...... " << refstr << std::endl;
-	ost << "   C0 Filler Table......... " << fillstr << std::endl;
-	ost << "   Diversity............... " << divstr << std::endl;
+	ost << "   External Reference...... " << (config->extref ? "Enabled" : "Disabled") << std::endl;
+	ost << "   C0 Filler Table......... " << (config->filler ? "Enabled" : "Disabled") << std::endl;
+	ost << "   Diversity............... " << (config->diversity ? "Enabled" : "Disabled") << std::endl;
 	ost << "   Tuning offset........... " << config->offset << std::endl;
 	std::cout << ost << std::endl;
 
@@ -273,101 +193,21 @@ static void setup_signal_handlers()
 	}
 }
 
-static void print_help()
-{
-	fprintf(stdout, "Options:\n"
-		"  -h    This text\n"
-		"  -a    UHD device args\n"
-		"  -l    Logging level (%s)\n"
-		"  -i    IP address of GSM core\n"
-		"  -p    Base port number\n"
-		"  -d    Enable dual channel diversity receiver\n"
-		"  -x    Enable external 10 MHz reference\n"
-		"  -s    Samples-per-symbol (1 or 4)\n"
-		"  -c    Number of ARFCN channels (default=1)\n"
-		"  -f    Enable C0 filler table\n"
-		"  -o    Set baseband frequency offset (default=auto)\n",
-		"EMERG, ALERT, CRT, ERR, WARNING, NOTICE, INFO, DEBUG");
-}
-
-static void handle_options(int argc, char **argv, struct trx_config *config)
-{
-	int option;
-
-	config->port = 0;
-	config->sps = 0;
-	config->chans = 0;
-	config->extref = false;
-	config->filler = false;
-	config->diversity = false;
-	config->offset = 0.0;
-
-	while ((option = getopt(argc, argv, "ha:l:i:p:c:dxfo:s:")) != -1) {
-		switch (option) {
-		case 'h':
-			print_help();
-			exit(0);
-			break;
-		case 'a':
-			config->dev_args = optarg;
-			break;
-		case 'l':
-			config->log_level = optarg;
-			break;
-		case 'i':
-			config->addr = optarg;
-			break;
-		case 'p':
-			config->port = atoi(optarg);
-			break;
-		case 'c':
-			config->chans = atoi(optarg);
-			break;
-		case 'd':
-			config->diversity = true;
-			break;
-		case 'x':
-			config->extref = true;
-			break;
-		case 'f':
-			config->filler = true;
-			break;
-		case 'o':
-			config->offset = atof(optarg);
-			break;
-		case 's':
-			config->sps = atoi(optarg);
-			if ((config->sps != 1) && (config->sps != 4)) {
-				printf("Unsupported samples-per-symbol\n\n");
-				print_help();
-				exit(0);
-			}
-			break;
-		default:
-			print_help();
-			exit(0);
-		}
-	}
-}
 
 int main(int argc, char *argv[])
 {
+	gengetopt_args_info args_info;
+	if (cmdline_parser (argc, argv, &args_info) != 0)
+	    exit(1) ;
+
 	int type, chans;
 	RadioDevice *usrp;
 	RadioInterface *radio = NULL;
 	Transceiver *trx = NULL;
 	struct trx_config config;
 
-	handle_options(argc, argv, &config);
-
 	setup_signal_handlers();
-
-	/* Check database sanity */
-	if (!trx_setup_config(&config)) {
-		std::cerr << "Config: Database failure - exiting" << std::endl;
-		return EXIT_FAILURE;
-	}
-
+	trx_setup_config(&config, &args_info);
 	gLogInit("transceiver", config.log_level.c_str(), LOG_LOCAL7);
 
 	srandom(time(NULL));
