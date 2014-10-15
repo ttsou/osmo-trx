@@ -31,7 +31,6 @@
 
 #include <GSMCommon.h>
 #include <Logger.h>
-#include <Configuration.h>
 
 struct trx_config {
 	std::string log_level;
