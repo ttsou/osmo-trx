@@ -78,6 +78,7 @@ bool trx_setup_config(struct trx_config *config, gengetopt_args_info *args_info)
 	config->addr = args_info->address_arg;
 	config->extref = args_info->extref_given;
 	config->diversity = args_info->diversity_given;
+	config->filler = args_info->filler_given;
 	config->sps = args_info->samples_arg;
 	config->chans = args_info->channels_arg;
 	config->offset = args_info->offset_arg;
