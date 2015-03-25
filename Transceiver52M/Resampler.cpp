@@ -167,16 +167,12 @@ void Resampler::computePath()
 	}
 }
 
-int Resampler::rotate(float *in, size_t in_len, float *out, size_t out_len)
+int Resampler::rotate(const float *in, size_t in_len, float *out, size_t out_len)
 {
 	int n, path;
-	int hist_len = filt_len - 1;
 
 	if (!check_vec_len(in_len, out_len, p, q))
 		return -1; 
-
-	/* Insert history */
-	memcpy(&in[-2 * hist_len], history, hist_len * 2 * sizeof(float));
 
 	/* Generate output from precomputed input/output paths */
 	for (size_t i = 0; i < out_len; i++) {
@@ -189,24 +185,14 @@ int Resampler::rotate(float *in, size_t in_len, float *out, size_t out_len)
 			      n, 1, 1, 0);
 	}
 
-	/* Save history */
-	memcpy(history, &in[2 * (in_len - hist_len)],
-	       hist_len * 2 * sizeof(float));
-
 	return out_len;
 }
 
 bool Resampler::init(float bw)
 {
-	size_t hist_len = filt_len - 1;
-
 	/* Filterbank filter internals */
 	if (initFilters(bw) < 0)
 		return false;
-
-	/* History buffer */
-	history = new float[2 * hist_len];
-	memset(history, 0, 2 * hist_len * sizeof(float));
 
 	/* Precompute filterbank paths */
 	in_index = new size_t[MAX_OUTPUT_LEN];
@@ -222,7 +208,7 @@ size_t Resampler::len()
 }
 
 Resampler::Resampler(size_t p, size_t q, size_t filt_len)
-	: in_index(NULL), out_path(NULL), partitions(NULL), history(NULL)
+	: in_index(NULL), out_path(NULL), partitions(NULL)
 {
 	this->p = p;
 	this->q = q;
@@ -233,7 +219,6 @@ Resampler::~Resampler()
 {
 	releaseFilters();
 
-	delete history;
 	delete in_index;
 	delete out_path;
 }
