@@ -51,6 +51,7 @@ TransceiverState::TransceiverState()
     chanResponse[i] = NULL;
     DFEForward[i] = NULL;
     DFEFeedback[i] = NULL;
+    handoverActive[i] = false;
 
     for (int n = 0; n < 102; n++)
       fillerTable[n][i] = NULL;
@@ -411,6 +412,9 @@ Transceiver::CorrType Transceiver::expectedCorrType(GSM::Time currTime,
   unsigned burstTN = currTime.TN();
   unsigned burstFN = currTime.FN();
 
+  if (state->handoverActive[burstTN])
+    return RACH;
+
   switch (state->chanType[burstTN]) {
   case NONE:
     return OFF;
@@ -760,8 +764,29 @@ void Transceiver::driveControl(size_t chan)
       generateMidamble(mSPSRx, TSC);
       sprintf(response,"RSP SETTSC 0 %d", TSC);
     }
+  } else if (!strcmp(command,"HANDOVER")) {
+    int  tn;
+    sscanf(buffer, "%3s %s %d", cmdcheck, command, &tn);
+    if ((tn < 0) || (tn > 7)) {
+      LOG(ERR) << "bogus message on control interface";
+      sprintf(response, "RSP HANDOVER 1 %d", tn);
+    }
+    else {
+      mStates[chan].handoverActive[tn] = true;
+      sprintf(response, "RSP HANDOVER 0 %d", tn);
+    }
   }
-  else if (strcmp(command,"SETSLOT")==0) {
+  else if (!strcmp(command, "NOHANDOVER")) {
+    int tn;
+    sscanf(buffer,"%3s %s %d", cmdcheck, command, &tn);
+    if ((tn < 0) || (tn > 7)) {
+      LOG(ERR) << "bogus message on control interface";
+      sprintf(response, "RSP NOHANDOVER 1 %d", tn);
+    } else {
+      mStates[chan].handoverActive[tn] = false;
+      sprintf(response, "RSP NOHANDOVER 0 %d", tn);
+    }
+  } else if (strcmp(command,"SETSLOT")==0) {
     // set TSC 
     int  corrCode;
     int  timeslot;

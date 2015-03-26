@@ -78,6 +78,9 @@ struct TransceiverState {
   float chanRespOffset[8];
   complex chanRespAmplitude[8];
 
+  /* OpenBTS handover command */
+  bool handoverActive[8];
+
   /* Received noise energy levels */
   float mNoiseLev;
   noiseVector mNoises;
