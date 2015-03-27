@@ -114,7 +114,7 @@ static double get_dev_offset(enum uhd_dev_type type,
 
 	/* Reject USRP1 */
 	if (type == USRP1) {
-		LOG(ERR) << "Invalid device type";
+		LOG(ALERT) << "Invalid device type";
 		return 0.0;
 	}
 
@@ -145,7 +145,7 @@ static double get_dev_offset(enum uhd_dev_type type,
 	}
 
 	if (!offset) {
-		LOG(ERR) << "Invalid device configuration";
+		LOG(ALERT) << "Invalid device configuration";
 		return 0.0;
 	}
 
@@ -732,7 +732,7 @@ int uhd_device::open(const std::string &args, bool extref)
 	// Set receive chain sample offset 
 	double offset = get_dev_offset(dev_type, sps, diversity);
 	if (offset == 0.0) {
-		LOG(ERR) << "Unsupported configuration, no correction applied";
+		LOG(ALERT) << "Unsupported configuration, no correction applied";
 		ts_offset = 0;
 	} else  {
 		ts_offset = (TIMESTAMP) (offset * rx_rate);
@@ -929,13 +929,12 @@ int uhd_device::readSamples(std::vector<short *> &bufs, int len, bool *overrun,
 	timestamp += ts_offset;
 
 	ts = convert_time(timestamp, rx_rate);
-	LOG(DEBUG) << "Requested timestamp = " << ts.get_real_secs();
 
 	// Check that timestamp is valid
 	rc = rx_buffers[0]->avail_smpls(timestamp);
 	if (rc < 0) {
-		LOG(ERR) << rx_buffers[0]->str_code(rc);
-		LOG(ERR) << rx_buffers[0]->str_status(timestamp);
+		LOG(ALERT) << rx_buffers[0]->str_code(rc);
+		LOG(ALERT) << rx_buffers[0]->str_status(timestamp);
 		return 0;
 	}
 
@@ -973,7 +972,6 @@ int uhd_device::readSamples(std::vector<short *> &bufs, int len, bool *overrun,
 		}
 
 		ts = metadata.time_spec;
-		LOG(DEBUG) << "Received timestamp = " << ts.get_real_secs();
 
 		for (size_t i = 0; i < rx_buffers.size(); i++) {
 			rc = rx_buffers[i]->write((short *) &pkt_bufs[i].front(),
@@ -982,8 +980,8 @@ int uhd_device::readSamples(std::vector<short *> &bufs, int len, bool *overrun,
 
 			// Continue on local overrun, exit on other errors
 			if ((rc < 0)) {
-				LOG(ERR) << rx_buffers[i]->str_code(rc);
-				LOG(ERR) << rx_buffers[i]->str_status(timestamp);
+				LOG(ALERT) << rx_buffers[i]->str_code(rc);
+				LOG(ALERT) << rx_buffers[i]->str_status(timestamp);
 				if (rc != smpl_buf::ERROR_OVERFLOW)
 					return 0;
 			}
@@ -994,8 +992,8 @@ int uhd_device::readSamples(std::vector<short *> &bufs, int len, bool *overrun,
 	for (size_t i = 0; i < rx_buffers.size(); i++) {
 		rc = rx_buffers[i]->read(bufs[i], len, timestamp);
 		if ((rc < 0) || (rc != len)) {
-			LOG(ERR) << rx_buffers[i]->str_code(rc);
-			LOG(ERR) << rx_buffers[i]->str_status(timestamp);
+			LOG(ALERT) << rx_buffers[i]->str_code(rc);
+			LOG(ALERT) << rx_buffers[i]->str_status(timestamp);
 			return 0;
 		}
 	}
