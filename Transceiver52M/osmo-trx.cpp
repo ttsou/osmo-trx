@@ -356,6 +356,7 @@ int main(int argc, char *argv[])
 	RadioDevice *usrp;
 	RadioInterface *radio = NULL;
 	Transceiver *trx = NULL;
+	RadioDevice::InterfaceType iface = RadioDevice::NORMAL;
 	struct trx_config config;
 
 	handle_options(argc, argv, &config);
@@ -373,8 +374,7 @@ int main(int argc, char *argv[])
 	srandom(time(NULL));
 
 	/* Create the low level device object */
-	usrp = RadioDevice::make(config.sps, config.chans,
-				 config.diversity, config.offset);
+	usrp = RadioDevice::make(config.sps, iface, config.chans, config.offset);
 	type = usrp->open(config.dev_args, config.extref);
 	if (type < 0) {
 		LOG(ALERT) << "Failed to create radio device" << std::endl;

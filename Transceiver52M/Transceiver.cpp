@@ -657,6 +657,11 @@ void Transceiver::driveControl(size_t chan)
   int msgLen = -1;
   buffer[0] = '\0';
 
+  if (chan >= mChans) {
+    LOG(ALERT) << "Command on invalid channel";
+    return;
+  }
+
   msgLen = mCtrlSockets[chan]->read(buffer);
 
   if (msgLen < 1) {
@@ -679,11 +684,15 @@ void Transceiver::driveControl(size_t chan)
   LOG(INFO) << "command is " << buffer;
 
   if (strcmp(command,"POWEROFF")==0) {
-    stop();
-    sprintf(response,"RSP POWEROFF 0");
+    if (chan) {
+      sprintf(response,"RSP POWEROFF 1");
+    } else {
+      stop();
+      sprintf(response,"RSP POWEROFF 0");
+    }
   }
   else if (strcmp(command,"POWERON")==0) {
-    if (!start())
+    if (chan || !start())
       sprintf(response,"RSP POWERON 1");
     else
       sprintf(response,"RSP POWERON 0");
@@ -696,7 +705,6 @@ void Transceiver::driveControl(size_t chan)
     sprintf(response,"RSP SETMAXDLY 0 %d",maxDelay);
   }
   else if (strcmp(command,"SETRXGAIN")==0) {
-    //set expected maximum time-of-arrival
     int newGain;
     sscanf(buffer,"%3s %s %d",cmdcheck,command,&newGain);
     newGain = mRadioInterface->setRxGain(newGain, chan);
@@ -755,9 +763,7 @@ void Transceiver::driveControl(size_t chan)
     // set TSC
     unsigned TSC;
     sscanf(buffer, "%3s %s %d", cmdcheck, command, &TSC);
-    if (mOn)
-      sprintf(response, "RSP SETTSC 1 %d", TSC);
-    else if (chan && (TSC != mTSC))
+    if (mOn || (chan && (TSC != mTSC)))
       sprintf(response, "RSP SETTSC 1 %d", TSC);
     else {
       mTSC = TSC;

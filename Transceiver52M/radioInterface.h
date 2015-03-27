@@ -22,6 +22,8 @@
 #include "radioClock.h"
 #include "radioBuffer.h"
 #include "Resampler.h"
+#include "Channelizer.h"
+#include "Synthesis.h"
 
 static const unsigned gSlotLen = 148;      ///< number of symbols per slot, not counting guard periods
 
@@ -100,13 +102,13 @@ public:
   RadioClock* getClock(void) { return &mClock;};
 
   /** set transmit frequency */
-  bool tuneTx(double freq, size_t chan = 0);
+  virtual bool tuneTx(double freq, size_t chan = 0);
 
   /** set receive frequency */
   virtual bool tuneRx(double freq, size_t chan = 0);
 
   /** set receive gain */
-  double setRxGain(double dB, size_t chan = 0);
+  virtual double setRxGain(double dB, size_t chan = 0);
 
   /** get receive gain */
   double getRxGain(size_t chan = 0);
@@ -161,6 +163,33 @@ public:
 
   bool init(int type);
   void close();
+};
+
+class RadioInterfaceMulti : public RadioInterface {
+private:
+  bool pushBuffer();
+  void pullBuffer();
+
+  signalVector *outerSendBuffer;
+  signalVector *outerRecvBuffer;
+  std::vector<signalVector *> history;
+  std::vector<bool> active;
+
+  Resampler *dnsampler;
+  Resampler *upsampler;
+  Channelizer *channelizer;
+  Synthesis *synthesis;
+
+public:
+  RadioInterfaceMulti(RadioDevice* wRadio, size_t wSPS = 4, size_t chans = 1);
+  ~RadioInterfaceMulti();
+
+  bool init(int type);
+  void close();
+
+  bool tuneTx(double freq, size_t chan);
+  bool tuneRx(double freq, size_t chan);
+  double setRxGain(double dB, size_t chan);
 };
 
 class RadioInterfaceDiversity : public RadioInterface {
