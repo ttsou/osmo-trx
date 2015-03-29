@@ -51,6 +51,7 @@ EXTRA_DIST = \
 noinst_LTLIBRARIES = libtransceiver.la
 
 COMMON_SOURCES = \
+	osmo-trx-options.c \
 	radioInterface.cpp \
 	radioVector.cpp \
 	radioClock.cpp \
@@ -67,6 +68,7 @@ libtransceiver_la_SOURCES = \
 bin_PROGRAMS = osmo-trx
 
 noinst_HEADERS = \
+	osmo-trx-options.h \
 	Complex.h \
 	radioInterface.h \
 	radioVector.h \

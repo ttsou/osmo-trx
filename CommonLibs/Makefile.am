@@ -36,10 +36,8 @@ libcommon_la_SOURCES = \
 	Sockets.cpp \
 	Threads.cpp \
 	Timeval.cpp \
-	Reporting.cpp \
 	Logger.cpp \
 	Configuration.cpp \
-	sqlite3util.cpp \
 	URLEncode.cpp \
 	Utils.cpp
 
@@ -50,8 +48,6 @@ noinst_PROGRAMS = \
 	TimevalTest \
 	RegexpTest \
 	VectorTest \
-	ConfigurationTest \
-	LogTest \
 	URLEncodeTest \
 	F16Test
 
@@ -67,18 +63,16 @@ noinst_HEADERS = \
 	Regexp.h \
 	Vector.h \
 	Configuration.h \
-	Reporting.h \
 	F16.h \
 	URLEncode.h \
 	Utils.h \
-	Logger.h \
-	sqlite3util.h
+	Logger.h
 
 URLEncodeTest_SOURCES = URLEncodeTest.cpp
 URLEncodeTest_LDADD = libcommon.la
 
 BitVectorTest_SOURCES = BitVectorTest.cpp
-BitVectorTest_LDADD = libcommon.la $(SQLITE_LA)
+BitVectorTest_LDADD = libcommon.la
 
 InterthreadTest_SOURCES = InterthreadTest.cpp
 InterthreadTest_LDADD = libcommon.la
@@ -92,19 +86,13 @@ TimevalTest_SOURCES = TimevalTest.cpp
 TimevalTest_LDADD = libcommon.la
 
 VectorTest_SOURCES = VectorTest.cpp
-VectorTest_LDADD = libcommon.la $(SQLITE_LA)
+VectorTest_LDADD = libcommon.la
 
 RegexpTest_SOURCES = RegexpTest.cpp
 RegexpTest_LDADD = libcommon.la
 
-ConfigurationTest_SOURCES = ConfigurationTest.cpp
-ConfigurationTest_LDADD = libcommon.la 	$(SQLITE_LA)
-
-# ReportingTest_SOURCES = ReportingTest.cpp
-# ReportingTest_LDADD = libcommon.la $(SQLITE_LA)
-
-LogTest_SOURCES = LogTest.cpp
-LogTest_LDADD = libcommon.la $(SQLITE_LA)
+#LogTest_SOURCES = LogTest.cpp
+#LogTest_LDADD = libcommon.la
 
 F16Test_SOURCES = F16Test.cpp
 
