@@ -693,26 +693,25 @@ static signalVector *rotateBurst(const BitVector &wBurst,
   return shaped;
 }
 
-static signalVector *modulateBurstLaurent(const BitVector &bits,
-					  int guard_len, int sps)
+static signalVector *modulateBurstLaurent(const BitVector &bits)
 {
-  int burst_len;
+  int burst_len, sps = 4;
   float phase;
   signalVector *c0_pulse, *c1_pulse, *c0_burst;
   signalVector *c1_burst, *c0_shaped, *c1_shaped;
   signalVector::iterator c0_itr, c1_itr;
 
-  /*
-   * Apply before and after bits to reduce phase error at burst edges.
-   * Make sure there is enough room in the burst to accomodate all bits.
-   */
-  if (guard_len < 4)
-    guard_len = 4;
-
   c0_pulse = GSMPulse->c0;
   c1_pulse = GSMPulse->c1;
 
-  burst_len = sps * (bits.size() + guard_len);
+  burst_len = 625;
+
+  /* Pad start/end of burst to make rise-fall test happy */
+  BitVector _bits(bits.size() + 2);
+  _bits[0] = 0;
+  _bits[_bits.size() - 1] = 0;
+  for (size_t i = 0; i < bits.size(); i++)
+    _bits[1 + i] = bits[i];
 
   c0_burst = new signalVector(burst_len, c0_pulse->size());
   c0_burst->isReal(true);
@@ -723,17 +722,17 @@ static signalVector *modulateBurstLaurent(const BitVector &bits,
   c1_itr = c1_burst->begin();
 
   /* Padded differential start bits */
-  *c0_itr = 2.0 * (0x00 & 0x01) - 1.0;
+  *c0_itr = -1.0;
   c0_itr += sps;
 
   /* Main burst bits */
-  for (unsigned i = 0; i < bits.size(); i++) {
-    *c0_itr = 2.0 * (bits[i] & 0x01) - 1.0;
+  for (unsigned i = 0; i < _bits.size(); i++) {
+    *c0_itr = 2.0 * (_bits[i] & 0x01) - 1.0;
     c0_itr += sps;
   }
 
   /* Padded differential end bits */
-  *c0_itr = 2.0 * (0x01 & 0x01) - 1.0;
+  *c0_itr = -1.0;
 
   /* Generate C0 phase coefficients */
   GMSKRotate(*c0_burst, sps);
@@ -744,14 +743,14 @@ static signalVector *modulateBurstLaurent(const BitVector &bits,
   c1_itr += sps * 2;
 
   /* Start magic */
-  phase = 2.0 * ((0x01 & 0x01) ^ (0x01 & 0x01)) - 1.0;
+  phase = -1.0;
   *c1_itr = *c0_itr * Complex<float>(0, phase);
   c0_itr += sps;
   c1_itr += sps;
 
   /* Generate C1 phase coefficients */
-  for (unsigned i = 2; i < bits.size(); i++) {
-    phase = 2.0 * ((bits[i - 1] & 0x01) ^ (bits[i - 2] & 0x01)) - 1.0;
+  for (unsigned i = 2; i < _bits.size(); i++) {
+    phase = 2.0 * ((_bits[i - 1] & 0x01) ^ (_bits[i - 2] & 0x01)) - 1.0;
     *c1_itr = *c0_itr * Complex<float>(0, phase);
 
     c0_itr += sps;
@@ -759,8 +758,8 @@ static signalVector *modulateBurstLaurent(const BitVector &bits,
   }
 
   /* End magic */
-  int i = bits.size();
-  phase = 2.0 * ((bits[i-1] & 0x01) ^ (bits[i-2] & 0x01)) - 1.0;
+  int i = _bits.size();
+  phase = 2.0 * ((_bits[i - 1] & 0x01) ^ (_bits[i - 2] & 0x01)) - 1.0;
   *c1_itr = *c0_itr * Complex<float>(0, phase);
 
   /* Primary (C0) and secondary (C1) pulse shaping */
@@ -822,7 +821,7 @@ signalVector *modulateBurst(const BitVector &wBurst, int guardPeriodLength,
   if (emptyPulse)
     return rotateBurst(wBurst, guardPeriodLength, sps);
   else if (sps == 4)
-    return modulateBurstLaurent(wBurst, guardPeriodLength, sps);
+    return modulateBurstLaurent(wBurst);
   else
     return modulateBurstBasic(wBurst, guardPeriodLength, sps);
 }
