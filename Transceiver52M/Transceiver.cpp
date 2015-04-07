@@ -42,6 +42,8 @@ using namespace GSM;
 /* Number of running values use in noise average */
 #define NOISE_CNT			20
 
+BitVector fillerBurst(148);
+
 TransceiverState::TransceiverState()
   : mRetrans(false), mNoiseLev(0.0), mNoises(NOISE_CNT), mPower(0.0)
 {
@@ -70,17 +72,31 @@ TransceiverState::~TransceiverState()
   }
 }
 
-void TransceiverState::init(size_t slot, signalVector *burst, bool fill)
+void TransceiverState::init(size_t slot, bool fill, float scale, int sps)
 {
-  signalVector *filler;
+  signalVector *burst;
 
   for (int i = 0; i < 102; i++) {
-    if (fill)
-      filler = new signalVector(*burst);
-    else
-      filler = new signalVector(burst->size());
+    if (fill) {
+      for (size_t i = 0; i < 3; i++)
+        fillerBurst[i] = 0;
 
-    fillerTable[i][slot] = filler;
+      for (size_t i = 0; i < fillerBurst.size(); i++)
+        fillerBurst[i] = rand() % 2;
+
+      for (size_t i = 0; i < 26; i++)
+        fillerBurst[61 + i] = GSM::gTrainingSequence[7][i];
+
+      for (size_t i = 145; i < 148; i++)
+        fillerBurst[i] = 0;
+
+      burst = modulateBurst(fillerBurst, 8 + (slot % 4 == 0) - 0, sps);
+      scaleVector(*burst, scale);
+    } else {
+      burst = new signalVector((148 + 8 + (slot % 4 == 0)) * sps);
+    }
+
+    fillerTable[i][slot] = burst;
   }
 }
 
@@ -128,7 +144,6 @@ Transceiver::~Transceiver()
 bool Transceiver::init(bool filler)
 {
   int d_srcport, d_dstport, c_srcport, c_dstport;
-  signalVector *burst;
 
   if (!mChans) {
     LOG(ALERT) << "No channels assigned";
@@ -150,10 +165,6 @@ bool Transceiver::init(bool filler)
   mTxPriorityQueues.resize(mChans);
   mReceiveFIFO.resize(mChans);
   mStates.resize(mChans);
-
-  /* Filler table retransmissions - support only on channel 0 */
-  if (filler)
-    mStates[0].mRetrans = true;
 
   /* Setup sockets */
   for (size_t i = 0; i < mChans; i++) {
@@ -180,12 +191,8 @@ bool Transceiver::init(bool filler)
     mControlServiceLoopThreads[i]->start((void * (*)(void*))
                                  ControlServiceLoopAdapter, (void*) chan);
 
-    for (size_t n = 0; n < 8; n++) {
-      burst = modulateBurst(gDummyBurst, 8 + (n % 4 == 0), mSPSTx);
-      scaleVector(*burst, txFullScale);
-      mStates[i].init(n, burst, filler && !i);
-      delete burst;
-    }
+    for (size_t n = 0; n < 8; n++)
+      mStates[i].init(n, filler, txFullScale, mSPSTx);
   }
 
   return true;
@@ -351,7 +358,7 @@ void Transceiver::pushRadioVector(GSM::Time &nowTime)
     modFN = nowTime.FN() % state->fillerModulus[TN];
 
     bursts[i] = state->fillerTable[modFN][TN];
-    zeros[i] = state->chanType[TN] == NONE;
+    zeros[i] = false;
 
     if ((burst = mTxPriorityQueues[i].getCurrentBurst(nowTime))) {
       bursts[i] = burst->getVector();

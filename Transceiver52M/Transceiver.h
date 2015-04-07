@@ -54,7 +54,7 @@ struct TransceiverState {
   ~TransceiverState();
 
   /* Initialize a multiframe slot in the filler table */
-  void init(size_t slot, signalVector *burst, bool fill);
+  void init(size_t slot, bool fill, float scale, int sps);
 
   int chanType[8];
 
