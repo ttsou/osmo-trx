@@ -132,14 +132,15 @@ public:
     V,                  ///< FCCH+SCH+CCCH+BCCH+SDCCH/4+SACCH/4, uplink RACH+SDCCH/4
     VI,                 ///< CCCH+BCCH, uplink RACH
     VII,                ///< SDCCH/8 + SACCH/8
+    NONE,               ///< Channel is inactive, default
+    LOOPBACK,            ///< similar go VII, used in loopback testing
+    IGPRS,               ///< GPRS channel, like I but static filler frames.
     VIII,               ///< TCH/F + FACCH/F + SACCH/M
     IX,                 ///< TCH/F + SACCH/M
     X,                  ///< TCH/FD + SACCH/MD
     XI,                 ///< PBCCH+PCCCH+PDTCH+PACCH+PTCCH
     XII,                ///< PCCCH+PDTCH+PACCH+PTCCH
     XIII,               ///< PDTCH+PACCH+PTCCH
-    NONE,               ///< Channel is inactive, default
-    LOOPBACK            ///< similar go VII, used in loopback testing
   } ChannelCombination;
 
   /** Codes for burst types of received bursts*/
