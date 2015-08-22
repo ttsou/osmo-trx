@@ -45,10 +45,12 @@ extern "C" {
  */
 #define RESAMP_TX4_FILTER		0.45
 
+#if 0
 static size_t resamp_inrate = 0;
 static size_t resamp_inchunk = 0;
 static size_t resamp_outrate = 0;
 static size_t resamp_outchunk = 0;
+#endif
 
 RadioInterfaceDiversity::RadioInterfaceDiversity(RadioDevice *wRadio,
 						 size_t sps, size_t chans)
@@ -81,6 +83,7 @@ void RadioInterfaceDiversity::close()
 
 bool RadioInterfaceDiversity::setupDiversityChannels()
 {
+#if 0
 	size_t inner_rx_len;
 
 	/* Inner and outer rates */
@@ -108,13 +111,14 @@ bool RadioInterfaceDiversity::setupDiversityChannels()
 
 		recvBuffer[i] = new signalVector(inner_rx_len);
 	}
-
+#endif
 	return true;
 }
 
 /* Initialize I/O specific objects */
 bool RadioInterfaceDiversity::init(int type)
 {
+#if 0
 	int tx_len, outer_rx_len;
 
 	if ((mMIMO != 2) || (mChans != 2)) {
@@ -147,7 +151,7 @@ bool RadioInterfaceDiversity::init(int type)
 	}
 
 	outerRecvBuffer = new signalVector(outer_rx_len, dnsamplers[0]->len());
-
+#endif
 	return true;
 }
 
@@ -177,6 +181,7 @@ bool RadioInterfaceDiversity::tuneRx(double freq, size_t chan)
 /* Receive a timestamped chunk from the device */
 void RadioInterfaceDiversity::pullBuffer()
 {
+#if 0
 	bool local_underrun;
 	int rc, num, path0, path1;
 	signalVector *shift, *base;
@@ -245,4 +250,5 @@ void RadioInterfaceDiversity::pullBuffer()
 	underrun |= local_underrun;
 	readTimestamp += (TIMESTAMP) resamp_outchunk;
 	recvCursor += resamp_inchunk;
+#endif
 }
