@@ -80,6 +80,13 @@ bool TransceiverState::init(int filler, size_t sps, float scale, size_t rtsc, un
 
   for (size_t n = 0; n < 8; n++) {
     for (size_t i = 0; i < 102; i++) {
+      if (n != 5) {
+        burst = generateEmptyBurst(sps, n);
+        scaleVector(*burst, scale);
+        fillerTable[i][n] = burst;
+        continue;
+      }
+
       switch (filler) {
       case Transceiver::FILLER_DUMMY:
         burst = generateDummyBurst(sps, n);
@@ -534,6 +541,7 @@ Transceiver::CorrType Transceiver::expectedCorrType(GSM::Time currTime,
 int Transceiver::detectBurst(signalVector &burst,
                              complex &amp, float &toa, CorrType type)
 {
+#if 0
   float threshold = 5.0, rc = 0;
 
   switch (type) {
@@ -561,6 +569,26 @@ int Transceiver::detectBurst(signalVector &burst,
     return type;
 
   return rc;
+#else
+  float rc, threshold = 15.0f;
+#if 0
+  rc = detectEdgeBurst(burst, mTSC, threshold, mSPSRx,
+                       amp, toa, mMaxExpectedDelayNB);
+  if (rc > 0)
+    return EDGE;
+#endif
+  rc = analyzeTrafficBurst(burst, mTSC, threshold, mSPSRx,
+                           amp, toa, mMaxExpectedDelayNB);
+  if (rc > 0)
+    return TSC;
+
+  rc = detectRACHBurst(burst, threshold, mSPSRx, amp, toa,
+                       mMaxExpectedDelayAB);
+  if (rc > 0)
+    return RACH;
+
+  return 0;
+#endif
 }
 
 
@@ -611,6 +639,8 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, double &RSSI, bool &i
   /* Set time and determine correlation type */
   GSM::Time time = radio_burst->getTime();
   CorrType type = expectedCorrType(time, chan);
+
+  type = TSC;
 
   /* Debug: dump bursts to disk */
   /* bits 0-7  - chan 0 timeslots
@@ -675,6 +705,7 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, double &RSSI, bool &i
     } else if (rc != SIGERR_NONE) {
       LOG(WARNING) << "Unhandled RACH or Normal Burst detection error";
     }
+    LOG(ERR) << "Missed burst " << time.TN() << " XXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
     delete radio_burst;
     return NULL;
