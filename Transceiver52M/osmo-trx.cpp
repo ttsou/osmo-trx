@@ -239,10 +239,6 @@ RadioInterface *makeRadioInterface(struct trx_config *config,
 {
 	RadioInterface *radio = NULL;
 
-	if ((config->rx_sps != 1) && (type != RadioDevice::NORMAL)) {
-		LOG(ALERT) << "Unsupported radio interface configuration";
-	}
-
 	switch (type) {
 	case RadioDevice::NORMAL:
 		radio = new RadioInterface(usrp, config->tx_sps,
@@ -337,14 +333,15 @@ static void print_help()
 		"  -d    Enable dual channel diversity receiver\n"
 		"  -m    Enable multi-ARFCN transceiver (default=disabled)\n"
 		"  -x    Enable external 10 MHz reference\n"
-		"  -s    Samples-per-symbol (1 or 4)\n"
+		"  -s    Tx samples-per-symbol (1 or 4)\n"
+		"  -S    Rx samples-per-symbol (1 or 4)\n"
 		"  -c    Number of ARFCN channels (default=1)\n"
 		"  -f    Enable C0 filler table\n"
 		"  -o    Set baseband frequency offset (default=auto)\n"
 		"  -r    Random Normal Burst test mode with TSC\n"
 		"  -A    Random Access Burst test mode with delay\n"
 		"  -R    RSSI to dBm offset in dB (default=0)\n"
-		"  -S    Swap channels (UmTRX only)\n",
+		"  -P    Swap channels (UmTRX only)\n",
 		"EMERG, ALERT, CRT, ERR, WARNING, NOTICE, INFO, DEBUG");
 }
 
@@ -406,6 +403,9 @@ static void handle_options(int argc, char **argv, struct trx_config *config)
 		case 's':
 			config->tx_sps = atoi(optarg);
 			break;
+		case 'S':
+			config->rx_sps = atoi(optarg);
+			break;
 		case 'r':
 			config->rtsc = atoi(optarg);
 			config->filler = Transceiver::FILLER_NORM_RAND;
@@ -417,12 +417,11 @@ static void handle_options(int argc, char **argv, struct trx_config *config)
 		case 'R':
 			config->rssi_offset = atof(optarg);
 			break;
-		case 'S':
+		case 'P':
 			config->swap_channels = true;
 			break;
 		case 'e':
 			config->edge = true;
-			config->rx_sps = 4;
 			break;
 		default:
 			print_help();
@@ -430,17 +429,17 @@ static void handle_options(int argc, char **argv, struct trx_config *config)
 		}
 	}
 
+	/* Force 4 sps for EDGE PSK-8 and multi-ARFCN configurations */
+	if (config->mcbts || config->edge) {
+		config->tx_sps = 4;
+		config->rx_sps = 4;
+	}
+
 	if (config->edge && (config->filler == Transceiver::FILLER_NORM_RAND))
 		config->filler = Transceiver::FILLER_EDGE_RAND;
 
 	if ((config->tx_sps != 1) && (config->tx_sps != 4)) {
 		printf("Unsupported samples-per-symbol %i\n\n", config->tx_sps);
-		print_help();
-		exit(0);
-	}
-
-	if (config->edge && (config->tx_sps != 4)) {
-		printf("EDGE only supported at 4 samples per symbol\n\n");
 		print_help();
 		exit(0);
 	}

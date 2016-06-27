@@ -109,10 +109,10 @@ static struct uhd_dev_offset uhd_offsets[] = {
 	{ B100,  1, 1, 1.2104e-4, "B100 1 SPS" },
 	{ B100,  4, 1, 7.9307e-5, "B100 4 SPS" },
 	{ B200,  1, 1, B2XX_TIMING_1SPS, "B200 1 SPS" },
-	{ B200,  4, 1, B2XX_TIMING_4SPS, "B200 4 SPS" },
+	{ B200,  4, 1, B2XX_TIMING_4SPS, "B200 4/1 Tx/Rx SPS" },
 	{ B210,  1, 1, B2XX_TIMING_1SPS, "B210 1 SPS" },
-	{ B210,  4, 1, B2XX_TIMING_4SPS, "B210 4 SPS" },
-	{ B2XX_MCBTS, 4, 4, 9.986548e-5, "B200/B210 4 SPS Multi-ARFCN" },
+	{ B210,  4, 1, B2XX_TIMING_4SPS, "B210 4/1 Tx/Rx SPS" },
+	{ B2XX_MCBTS, 4, 4, 1.07188e-4, "B200/B210 4 SPS Multi-ARFCN" },
 	{ E1XX,  1, 1, 9.5192e-5, "E1XX 1 SPS" },
 	{ E1XX,  4, 1, 6.5571e-5, "E1XX 4 SPS" },
 	{ E3XX,  1, 1, 1.84616e-4, "E3XX 1 SPS" },
@@ -121,9 +121,9 @@ static struct uhd_dev_offset uhd_offsets[] = {
 	{ X3XX,  4, 1, 1.1264e-4, "X3XX 4 SPS"},
 	{ UMTRX, 1, 1, 9.9692e-5, "UmTRX 1 SPS" },
 	{ UMTRX, 4, 1, 7.3846e-5, "UmTRX 4 SPS" },
-	{ B200,  4, 4, B2XX_TIMING_4_4SPS, "B200/B210 EDGE mode (4 SPS TX/RX)" },
-	{ B210,  4, 4, B2XX_TIMING_4_4SPS, "B200/B210 EDGE mode (4 SPS TX/RX)" },
-	{ UMTRX, 4, 4, 5.1503e-5, "UmTRX EDGE mode (4 SPS TX/RX)" },
+	{ B200,  4, 4, B2XX_TIMING_4_4SPS, "B200/B210 4 SPS" },
+	{ B210,  4, 4, B2XX_TIMING_4_4SPS, "B200/B210 4 SPS" },
+	{ UMTRX, 4, 4, 5.1503e-5, "UmTRX 4 SPS" },
 };
 #define NUM_UHD_OFFSETS (sizeof(uhd_offsets)/sizeof(uhd_offsets[0]))
 
@@ -346,7 +346,7 @@ private:
 	std::vector<smpl_buf *> rx_buffers;
 
 	void init_gains();
-	double get_dev_offset(bool edge);
+	double get_dev_offset();
 	int set_master_clk(double rate);
 	int set_rates(double tx_rate, double rx_rate);
 	bool parse_dev_type();
@@ -475,7 +475,7 @@ void uhd_device::init_gains()
 
 }
 
-double uhd_device::get_dev_offset(bool edge)
+double uhd_device::get_dev_offset()
 {
 	struct uhd_dev_offset *offset = NULL;
 
@@ -485,21 +485,10 @@ double uhd_device::get_dev_offset(bool edge)
 		return 0.0;
 	}
 
-	if (edge && (iface == DIVERSITY)) {
-		LOG(ERR) << "Unsupported configuration";
-		return 0.0;
-	}
-
-	if (edge && (dev_type != B200) &&
-	    (dev_type != B210) && (dev_type != UMTRX)) {
-		LOG(ALERT) << "EDGE is supported on B200/B210 and UmTRX only";
-		return 0.0;
-	}
-
 	/* Special cases (e.g. diversity receiver) */
 	if (iface == DIVERSITY) {
-		if (dev_type != UMTRX) {
-			LOG(ALERT) << "Diversity on UmTRX only";
+		if ((dev_type != UMTRX) || (rx_sps != 1)) {
+			LOG(ALERT) << "Unsupported device configuration";
 			return 0.0;
 		}
 
@@ -874,11 +863,7 @@ int uhd_device::open(const std::string &args, bool extref, bool swap_channels)
 	// Set receive chain sample offset. Trigger the EDGE offset
 	// table by checking for 4 SPS on the receive path. No other
 	// configuration supports using 4 SPS.
-	bool edge = false;
-	if (rx_sps == 4)
-		edge = true;
-
-	double offset = get_dev_offset(edge);
+	double offset = get_dev_offset();
 	if (offset == 0.0) {
 		LOG(ERR) << "Unsupported configuration, no correction applied";
 		ts_offset = 0;
