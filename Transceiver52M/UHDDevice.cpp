@@ -192,6 +192,19 @@ static double select_rate(uhd_dev_type type, int sps,
 	return -9999.99;
 }
 
+static bool dual_chan_device(int dev_type)
+{
+	switch (dev_type) {
+	case B210:
+	case X3XX:
+	case E3XX:
+	case UMTRX:
+		return true;
+	};
+
+	return false;
+}
+
 /*
     Sample Buffer - Allows reading and writing of timed samples using osmo-trx
                     or UHD style timestamps. Time conversions are handled
@@ -809,14 +822,37 @@ int uhd_device::open(const std::string &args, int ref, bool swap_channels)
 
 		dev_type = B2XX_MCBTS;
 		chans = 1;
-	} else if (chans == 2) {
-		if (dev_type == B210) {
-		} else if (dev_type == UMTRX) {
-			uhd::usrp::subdev_spec_t subdev_spec(swap_channels?"B:0 A:0":"A:0 B:0");
-			usrp_dev->set_tx_subdev_spec(subdev_spec);
-			usrp_dev->set_rx_subdev_spec(subdev_spec);
+	} else if (dual_chan_device(dev_type)) {
+		std::string base_str, swap_str;
+
+		if (chans == 2) {
+			if ((dev_type == B210) || (dev_type == E3XX)) {
+				base_str = "A:A A:B";
+				swap_str = "A:B A:A";
+			} else  {
+				base_str = "A:0 B:0";
+				swap_str = "B:0 A:0";
+			}
+		} else if (chans == 1) {
+			if ((dev_type == B210) || (dev_type == E3XX)) {
+				base_str = "A:A";
+				swap_str = "A:B";
+			} else {
+				base_str = "A:0";
+				swap_str = "B:0";
+			}
 		} else {
 			LOG(ALERT) << "Invalid device configuration";
+			return -1;
+		}
+
+		uhd::usrp::subdev_spec_t subdev_spec(swap_channels ?
+						     swap_str : base_str);
+		try {
+			usrp_dev->set_tx_subdev_spec(subdev_spec);
+			usrp_dev->set_rx_subdev_spec(subdev_spec);
+		} catch (const std::exception &ex) {
+			LOG(ALERT) << ex.what();
 			return -1;
 		}
 	} else if (chans != 1) {
