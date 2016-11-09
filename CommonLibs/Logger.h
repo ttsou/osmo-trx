@@ -127,7 +127,7 @@ std::list<std::string> gGetLoggerAlarms();		///< Get a copy of the recent alarm 
 /**@ Global control and initialization of the logging system. */
 //@{
 /** Initialize the global logging system. */
-void gLogInit(const char* name, const char* level=NULL, int facility=LOG_USER);
+bool gLogInit(const char* name, const char* level=NULL, int facility=LOG_USER);
 /** Get the logging level associated with a given file. */
 int gGetLoggingLevel(const char *filename=NULL);
 /** Allow early logging when still in constructors */

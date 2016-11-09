@@ -128,7 +128,6 @@ AC_CONFIG_FILES([\
     Transceiver52M/Makefile \
     Transceiver52M/arm/Makefile \
     Transceiver52M/x86/Makefile \
-    sqlite3/Makefile \
 ])
 
 AC_OUTPUT

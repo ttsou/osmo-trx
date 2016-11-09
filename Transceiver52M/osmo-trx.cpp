@@ -30,7 +30,6 @@
 
 #include <GSMCommon.h>
 #include <Logger.h>
-#include <Configuration.h>
 
 /* Samples-per-symbol for downlink path
  *     4 - Uses precision modulator (more computation, less distortion)
@@ -82,43 +81,7 @@ struct trx_config {
 	bool edge;
 };
 
-ConfigurationTable gConfig;
-
 volatile bool gshutdown = false;
-
-/* Run sanity check on configuration table
- *     The global table constructor cannot provide notification in the
- *     event of failure. Make sure that we can access the database,
- *     write to it, and that it contains the bare minimum required keys.
- */
-bool testConfig()
-{
-	int val = 9999;
-	std::string test = "asldfkjsaldkf";
-	const char *key = "Log.Level";
-
-	/* Attempt to query */
-	try {
-		gConfig.getStr(key);
-	} catch (...) {
-		std::cerr << std::endl;
-		std::cerr << "Config: Failed query required key " << key
-			  << std::endl;
-		return false;
-	}
-
-	/* Attempt to set a test value in the global config */
-	if (!gConfig.set(test, val)) {
-		std::cerr << std::endl;
-		std::cerr << "Config: Failed to set test key" << std::endl;
-		return false;
-	} else {
-		gConfig.remove(test);
-	}
-
-	return true;
-}
-
 
 /* Setup configuration values
  *     Don't query the existence of the Log.Level because it's a
@@ -130,40 +93,6 @@ bool testConfig()
 bool trx_setup_config(struct trx_config *config)
 {
 	std::string refstr, fillstr, divstr, mcstr, edgestr;
-
-	if (!testConfig())
-		return false;
-
-	if (config->log_level == "")
-		config->log_level = gConfig.getStr("Log.Level");
-
-	if (!config->port) {
-		if (gConfig.defines("TRX.Port"))
-			config->port = gConfig.getNum("TRX.Port");
-		else
-			config->port = DEFAULT_TRX_PORT;
-	}
-
-	if (config->addr == "") {
-		if (gConfig.defines("TRX.IP"))
-			config->addr = gConfig.getStr("TRX.IP");
-		else
-			config->addr = DEFAULT_TRX_IP;
-	}
-
-	if (!config->extref) {
-		if (gConfig.defines("TRX.Reference"))
-			config->extref = gConfig.getNum("TRX.Reference");
-		else
-			config->extref = DEFAULT_EXTREF;
-	}
-
-	if (!config->diversity) {
-		if (gConfig.defines("TRX.Diversity"))
-			config->diversity = gConfig.getNum("TRX.Diversity");
-		else
-			config->diversity = DEFAULT_DIVERSITY;
-	}
 
 	if (!config->chans)
 		config->chans = DEFAULT_CHANS;
@@ -350,7 +279,6 @@ static void handle_options(int argc, char **argv, struct trx_config *config)
 {
 	int option;
 
-	config->port = 0;
 	config->tx_sps = DEFAULT_TX_SPS;
 	config->rx_sps = DEFAULT_RX_SPS;
 	config->chans = DEFAULT_CHANS;
@@ -365,6 +293,11 @@ static void handle_options(int argc, char **argv, struct trx_config *config)
 	config->rssi_offset = 0.0;
 	config->swap_channels = false;
 	config->edge = false;
+	config->log_level = "NOTICE"
+	config->port = DEFAULT_TRX_PORT;
+	config->addr = DEFAULT_TRX_IP;
+	config->extref = DEFAULT_EXTREF;
+	config->diversity = DEFAULT_DIVERSITY;
 
 	while ((option = getopt(argc, argv, "ha:l:i:p:c:dmxgfo:s:b:r:A:R:Se")) != -1) {
 		switch (option) {
@@ -504,11 +437,14 @@ int main(int argc, char *argv[])
 
 	/* Check database sanity */
 	if (!trx_setup_config(&config)) {
-		std::cerr << "Config: Database failure - exiting" << std::endl;
+		std::cerr << "Configuration invalid - exiting" << std::endl;
 		return EXIT_FAILURE;
 	}
 
-	gLogInit("transceiver", config.log_level.c_str(), LOG_LOCAL7);
+	if (!gLogInit("transceiver", config.log_level.c_str(), LOG_LOCAL7)) {
+		std::cerr << "Logging initialization failed" << std::endl;
+		return EXIT_FAILURE;
+	}
 
 	srandom(time(NULL));
 
