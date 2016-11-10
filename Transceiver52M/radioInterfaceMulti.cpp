@@ -21,12 +21,12 @@
  */
 
 #include <radioInterface.h>
-#include <Logger.h>
 
 #include "Resampler.h"
 
 extern "C" {
-#include "convert.h"
+#include "Logging.h"
+#include "common/convert.h"
 }
 
 /* Resampling parameters for 64 MHz clocking */
@@ -132,7 +132,8 @@ bool RadioInterfaceMulti::init(int type)
 	size_t inchunk = 0, outchunk = 0;
 
 	if (mChans > MCHANS - 1) {
-		LOG(ALERT) << "Invalid channel configuration " << mChans;
+		LOGP(DDSP, LOGL_FATAL,
+                    "Invalid channel configuration %zu\n", mChans);
 		return false;
 	}
 
@@ -152,31 +153,33 @@ bool RadioInterfaceMulti::init(int type)
 	outchunk = RESAMP_OUTRATE * 4;
 
 	if (inchunk  * NUMCHUNKS < 625 * 2) {
-		LOG(ALERT) << "Invalid inner chunk size " << inchunk;
+		LOGP(DDSP, LOGL_FATAL,
+		     "Invalid inner chunk size %zu\n", inchunk);
 		return false;
 	}
 
 	dnsampler = new Resampler(RESAMP_INRATE, RESAMP_OUTRATE);
 	if (!dnsampler->init(1.0)) {
-		LOG(ALERT) << "Rx resampler failed to initialize";
+		LOGP(DDSP, LOGL_FATAL, "Rx resampler failed to initialize\n");
 		return false;
 	}
 
 	upsampler = new Resampler(RESAMP_OUTRATE, RESAMP_INRATE);
 	if (!upsampler->init(cutoff)) {
-		LOG(ALERT) << "Tx resampler failed to initialize";
+		LOGP(DDSP, LOGL_FATAL, "Tx resampler failed to initialize\n");
 		return false;
 	}
 
 	channelizer = new Channelizer(MCHANS, outchunk);
 	if (!channelizer->init()) {
-		LOG(ALERT) << "Rx channelizer failed to initialize";
+		LOGP(DDSP, LOGL_FATAL, "Rx channelizer failed to initialize\n");
 		return false;
 	}
 
 	synthesis = new Synthesis(MCHANS, outchunk);
 	if (!synthesis->init()) {
-		LOG(ALERT) << "Tx synthesis filter failed to initialize";
+		LOGP(DDSP, LOGL_FATAL,
+		     "Tx synthesis filter failed to initialize\n");
 		return false;
 	}
 
@@ -217,7 +220,7 @@ bool RadioInterfaceMulti::init(int type)
 		active[3] = true;
 		break;
 	default:
-		LOG(ALERT) << "Unsupported channel combination";
+		LOGP(DDSP, LOGL_FATAL, "Unsupported channel combination\n");
 		return false;
 	}
 
@@ -241,7 +244,9 @@ void RadioInterfaceMulti::pullBuffer()
 				  readTimestamp,
 				  &local_underrun);
 	if (num != channelizer->inputLen()) {
-		LOG(ALERT) << "Receive error " << num << ", " << channelizer->inputLen();
+		LOGP(DDSP, LOGL_FATAL,
+		     "Receive error: Expected %zu samples, but got %zu\n",
+		     channelizer->inputLen(), num);
 		return;
 	}
 
@@ -260,7 +265,8 @@ void RadioInterfaceMulti::pullBuffer()
 
 		int lchan = getLogicalChan(pchan, mChans);
 		if (lchan < 0) {
-			LOG(ALERT) << "Invalid logical channel " << pchan;
+			LOGP(DDSP, LOGL_FATAL,
+			     "Invalid logical channel %zu\n", pchan);
 			continue;
 		}
 
@@ -285,7 +291,8 @@ void RadioInterfaceMulti::pullBuffer()
 				       channelizer->outputLen(),
 				       wr_segment,
 				       recvBuffer[lchan]->getSegmentLen())) {
-			LOG(ALERT) << "Sample rate upsampling error";
+			LOGP(DDSP, LOGL_FATAL,
+			     "Sample rate upsampling failed\n");
 		}
 	}
 }
@@ -304,7 +311,8 @@ bool RadioInterfaceMulti::pushBuffer()
 
 		int lchan = getLogicalChan(pchan, mChans);
 		if (lchan < 0) {
-			LOG(ALERT) << "Invalid logical channel " << pchan;
+			LOGP(DDSP, LOGL_FATAL,
+			     "Invalid logical channel %zu\n", pchan);
 			continue;
 		}
 
@@ -312,7 +320,8 @@ bool RadioInterfaceMulti::pushBuffer()
 				       sendBuffer[lchan]->getSegmentLen(),
 				       synthesis->inputBuffer(pchan),
 				       synthesis->inputLen())) {
-			LOG(ALERT) << "Sample rate downsampling error";
+			LOGP(DDSP, LOGL_FATAL,
+			     "Sample rate downsampling failed\n");
 		}
 	}
 
@@ -328,7 +337,7 @@ bool RadioInterfaceMulti::pushBuffer()
 					  &underrun,
 					  writeTimestamp);
 	if (num != outerSendBuffer->size()) {
-		LOG(ALERT) << "Transmit error " << num;
+		LOGP(DDSP, LOGL_FATAL, "Transmit error %zu\n", num);;
 	}
 
 	writeTimestamp += num;
@@ -356,8 +365,8 @@ bool RadioInterfaceMulti::tuneTx(double freq, size_t chan)
 
   double center = mRadio->getTxFreq();
   if (!fltcmp(freq, center + (double) (chan - shift) * MCBTS_SPACING)) {
-    LOG(NOTICE) << "Channel " << chan << " RF frequency offset is "
-                << freq / 1e6 << " MHz";
+    LOGP(DTRX, LOGL_NOTICE,
+         "Channel %zu RF frequency offset is %f MHz\n", chan, freq / 1e6);
   }
 
   return true;
@@ -375,8 +384,8 @@ bool RadioInterfaceMulti::tuneRx(double freq, size_t chan)
 
   double center = mRadio->getRxFreq();
   if (!fltcmp(freq, center + (double) (chan - shift) * MCBTS_SPACING)) {
-    LOG(NOTICE) << "Channel " << chan << " RF frequency offset is "
-                << freq / 1e6 << " MHz";
+    LOGP(DTRX, LOGL_NOTICE,
+         "Channel %zu RF frequency offset is %f MHz\n", chan, freq / 1e6);
   }
 
   return true;

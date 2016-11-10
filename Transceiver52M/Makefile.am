@@ -61,6 +61,7 @@ COMMON_SOURCES = \
 	ChannelizerBase.cpp \
 	Channelizer.cpp \
 	Synthesis.cpp \
+	Logging.c \
 	common/fft.c
 
 libtransceiver_la_SOURCES = \
@@ -87,6 +88,7 @@ noinst_HEADERS = \
 	ChannelizerBase.h \
 	Channelizer.h \
 	Synthesis.h \
+	Logging.h \
 	common/convolve.h \
 	common/convert.h \
 	common/scale.h \
@@ -98,12 +100,12 @@ osmo_trx_LDADD = \
 	libtransceiver.la \
 	$(ARCH_LA) \
 	$(GSM_LA) \
-	$(COMMON_LA) $(SQLITE_LA)
+	$(COMMON_LA)
 
 if USRP1 
 libtransceiver_la_SOURCES += USRPDevice.cpp
-osmo_trx_LDADD += $(USRP_LIBS)
+osmo_trx_LDADD += $(USRP_LIBS) $(LIBOSMOCORE_LIBS)
 else
 libtransceiver_la_SOURCES += UHDDevice.cpp
-osmo_trx_LDADD += $(UHD_LIBS) $(FFTWF_LIBS)
+osmo_trx_LDADD += $(UHD_LIBS) $(FFTWF_LIBS) $(LIBOSMOCORE_LIBS)
 endif

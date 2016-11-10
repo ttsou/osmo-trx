@@ -22,12 +22,12 @@
  */
 
 #include <radioInterface.h>
-#include <Logger.h>
 
 #include "Resampler.h"
 
 extern "C" {
-#include "convert.h"
+#include "Logging.h"
+#include "common/convert.h"
 }
 
 /* Resampling parameters for 64 MHz clocking */
@@ -116,7 +116,7 @@ bool RadioInterfaceResamp::init(int type)
 		break;
 	case RadioDevice::NORMAL:
 	default:
-		LOG(ALERT) << "Invalid device configuration";
+		LOGP(DTRX, LOGL_FATAL, "Invalid device configuration\n");
 		return false;
 	}
 
@@ -128,13 +128,13 @@ bool RadioInterfaceResamp::init(int type)
 
 	dnsampler = new Resampler(resamp_inrate, resamp_outrate);
 	if (!dnsampler->init()) {
-		LOG(ALERT) << "Rx resampler failed to initialize";
+		LOGP(DTRX, LOGL_FATAL, "Rx resampler failed to initialize\n");
 		return false;
 	}
 
 	upsampler = new Resampler(resamp_outrate, resamp_inrate);
 	if (!upsampler->init(cutoff)) {
-		LOG(ALERT) << "Tx resampler failed to initialize";
+		LOGP(DTRX, LOGL_FATAL, "Tx resampler failed to initialize\n");
 		return false;
 	}
 
@@ -175,7 +175,7 @@ void RadioInterfaceResamp::pullBuffer()
 				       readTimestamp,
 				       &local_underrun);
 	if (num_recv != (int) resamp_outchunk) {
-		LOG(ALERT) << "Receive error " << num_recv;
+		LOGP(DTRX, LOGL_FATAL, "Receive error %zu\n", num_recv);
 		return;
 	}
 
@@ -191,7 +191,7 @@ void RadioInterfaceResamp::pullBuffer()
 			       recvBuffer[0]->getWriteSegment(),
 			       resamp_inchunk);
 	if (rc < 0) {
-		LOG(ALERT) << "Sample rate upsampling error";
+		LOGP(DTRX, LOGL_FATAL, "Sample rate upsampling failed\n");
 	}
 
 	/* Set history for the next chunk */
@@ -213,7 +213,7 @@ bool RadioInterfaceResamp::pushBuffer()
 			       (float *) outerSendBuffer->begin(),
 			       resamp_outchunk);
 	if (rc < 0) {
-		LOG(ALERT) << "Sample rate downsampling error";
+		LOGP(DTRX, LOGL_FATAL, "Sample rate downsampling failed\n");
 	}
 
 	convert_float_short(convertSendBuffer[0],
@@ -225,7 +225,7 @@ bool RadioInterfaceResamp::pushBuffer()
 				       &underrun,
 				       writeTimestamp);
 	if (numSent != resamp_outchunk) {
-		LOG(ALERT) << "Transmit error " << numSent;
+		LOGP(DTRX, LOGL_FATAL, "Transmit I/O error %zu\n", numSent);
 	}
 
 	writeTimestamp += resamp_outchunk;

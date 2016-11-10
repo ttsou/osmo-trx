@@ -26,7 +26,7 @@
 #include "Resampler.h"
 
 extern "C" {
-#include "convolve.h"
+#include "common/convolve.h"
 }
 
 #ifndef M_PI

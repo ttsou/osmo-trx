@@ -25,10 +25,10 @@
 #include <string.h>
 #include <cstdio>
 
-#include "Logger.h"
 #include "Synthesis.h"
 
 extern "C" {
+#include "Logging.h"
 #include "common/fft.h"
 #include "common/convolve.h"
 }
@@ -85,8 +85,7 @@ bool Synthesis::rotate(float *out, size_t len)
 	size_t hSize = 2 * hLen * sizeof(float);
 
 	if (!checkLen(blockLen, len)) {
-		std::cout << "Length fail" << std::endl;
-		exit(1);
+		LOGP(DDSP, LOGL_FATAL, "Internal length failure\n");
 		return false;
 	}
 

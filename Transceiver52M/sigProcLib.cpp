@@ -28,13 +28,13 @@
 
 #include "sigProcLib.h"
 #include "GSMCommon.h"
-#include "Logger.h"
 #include "Resampler.h"
 
 extern "C" {
-#include "convolve.h"
-#include "scale.h"
-#include "mult.h"
+#include "Logging.h"
+#include "common/convolve.h"
+#include "common/scale.h"
+#include "common/mult.h"
 }
 
 using namespace GSM;
@@ -1841,7 +1841,9 @@ int detectGeneralBurst(signalVector &rxBurst,
   // and only report clipping if we can't demod.
   float maxAmpl = maxAmplitude(rxBurst);
   if (maxAmpl > CLIP_THRESH) {
-    LOG(DEBUG) << "max burst amplitude: " << maxAmpl << " is above the clipping threshold: " << CLIP_THRESH << std::endl;
+    LOGP(DDSP, LOGL_ERROR,
+         "Max burst amplitude %f is above clipping threshold %f\n",
+         maxAmpl, CLIP_THRESH);
     clipping = true;
   }
 
@@ -2135,7 +2137,7 @@ bool sigProcLibSetup()
 
   dnsampler = new Resampler(1, 4);
   if (!dnsampler->init()) {
-    LOG(ALERT) << "Rx resampler failed to initialize";
+    LOGP(DDSP, LOGL_ERROR, "Rx resampler failed to initialize\n");
     goto fail;
   }
 

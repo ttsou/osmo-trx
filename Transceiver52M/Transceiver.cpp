@@ -24,8 +24,14 @@
 #include <stdio.h>
 #include <iomanip>      // std::setprecision
 #include <fstream>
+#include <ostream>
+
 #include "Transceiver.h"
-#include <Logger.h>
+
+extern "C" {
+#include <osmocom/core/logging.h>
+#include "Logging.h"
+}
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -174,12 +180,12 @@ bool Transceiver::init(int filler, size_t rtsc, unsigned rach_delay, bool edge)
   int d_srcport, d_dstport, c_srcport, c_dstport;
 
   if (!mChans) {
-    LOG(ALERT) << "No channels assigned";
+    LOGP(DTRX, LOGL_ERROR, "No channels assigned\n");
     return false;
   }
 
   if (!sigProcLibSetup()) {
-    LOG(ALERT) << "Failed to initialize signal processing library";
+    LOGP(DTRX, LOGL_ERROR, "Failed to initialize DSP library\n");
     return false;
   }
 
@@ -245,11 +251,11 @@ bool Transceiver::start()
   ScopedLock lock(mLock);
 
   if (mOn) {
-    LOG(ERR) << "Transceiver already running";
+    LOGP(DTRX, LOGL_NOTICE, "Transceiver already running\n");
     return true;
   }
 
-  LOG(NOTICE) << "Starting the transceiver";
+  LOGP(DTRX, LOGL_NOTICE, "Starting the transceiver\n");
 
   GSM::Time time = mRadioInterface->getClock()->get();
   mTransmitDeadlineClock = time;
@@ -257,7 +263,7 @@ bool Transceiver::start()
   mLatencyUpdateTime = time;
 
   if (!mRadioInterface->start()) {
-    LOG(ALERT) << "Device failed to start";
+    LOGP(DTRX, LOGL_ERROR, "Device failed to start\n");
     return false;
   }
 
@@ -303,7 +309,7 @@ void Transceiver::stop()
   if (!mOn)
     return;
 
-  LOG(NOTICE) << "Stopping the transceiver";
+  LOGP(DTRX, LOGL_NOTICE, "Stopping the transceiver\n");
   mTxLowerLoopThread->cancel();
   mRxLowerLoopThread->cancel();
 
@@ -312,7 +318,7 @@ void Transceiver::stop()
     mTxPriorityQueueServiceLoopThreads[i]->cancel();
   }
 
-  LOG(INFO) << "Stopping the device";
+  LOGP(DTRX, LOGL_NOTICE, "Stopping the device\n");
   mRadioInterface->stop();
 
   for (size_t i = 0; i < mChans; i++) {
@@ -330,7 +336,7 @@ void Transceiver::stop()
   delete mRxLowerLoopThread;
 
   mOn = false;
-  LOG(NOTICE) << "Transceiver stopped";
+  LOGP(DTRX, LOGL_NOTICE, "Transceiver stopped\n");
 }
 
 void Transceiver::addRadioVector(size_t chan, BitVector &bits,
@@ -340,12 +346,12 @@ void Transceiver::addRadioVector(size_t chan, BitVector &bits,
   radioVector *radio_burst;
 
   if (chan >= mTxPriorityQueues.size()) {
-    LOG(ALERT) << "Invalid channel " << chan;
+    LOGP(DTRX, LOGL_ERROR, "Received burst with invalid channel %u\n", chan);
     return;
   }
 
   if (wTime.TN() > 7) {
-    LOG(ALERT) << "Received burst with invalid slot " << wTime.TN();
+    LOGP(DTRX, LOGL_ERROR, "Received burst with invalid slot %u\n", wTime.TN());
     return;
   }
 
@@ -388,7 +394,7 @@ void Transceiver::pushRadioVector(GSM::Time &nowTime)
     state = &mStates[i];
 
     while ((burst = mTxPriorityQueues[i].getStaleBurst(nowTime))) {
-      LOG(NOTICE) << "dumping STALE burst in TRX->USRP interface";
+      LOGP(DTRX, LOGL_NOTICE, "Dumping STALE burst in TRX->USRP interface\n");
       if (state->mRetrans)
         updateFillerTable(i, burst);
       delete burst;
@@ -564,7 +570,7 @@ int Transceiver::detectBurst(signalVector &burst,
                          mMaxExpectedDelayAB);
     break;
   default:
-    LOG(ERR) << "Invalid correlation type";
+    LOGP(DTRX, LOGL_ERROR, "Invalid correlation type %i\n", type);
   }
 
   if (rc > 0)
@@ -650,7 +656,7 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, double &RSSI, bool &i
   }
 
   if (max_i < 0) {
-    LOG(ALERT) << "Received empty burst";
+    LOGP(DTRX, LOGL_ERROR, "Received empty burst\n");
     delete radio_burst;
     return NULL;
   }
@@ -685,9 +691,9 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime, double &RSSI, bool &i
     type = (CorrType) rc;
   } else if (rc <= 0) {
     if (rc == -SIGERR_CLIP) {
-      LOG(WARNING) << "Clipping detected on received RACH or Normal Burst";
+      LOGP(DTRX, LOGL_NOTICE, "Clipping detected on received burst\n");
     } else if (rc != SIGERR_NONE) {
-      LOG(WARNING) << "Unhandled RACH or Normal Burst detection error";
+      LOGP(DTRX, LOGL_NOTICE, "Unhandled receive detection error\n");
     }
 
     delete radio_burst;
@@ -734,10 +740,10 @@ void Transceiver::driveControl(size_t chan)
     writeClockInterface();
 
   if (strcmp(cmdcheck,"CMD")!=0) {
-    LOG(WARNING) << "bogus message on control interface";
+    LOGP(DTRX, LOGL_ERROR, "Bogus message on control interface\n");
     return;
   }
-  LOG(INFO) << "command is " << buffer;
+  LOGP(DTRX, LOGL_INFO, "Command is %s\n", buffer);
 
   if (strcmp(command,"POWEROFF")==0) {
     stop();
@@ -818,7 +824,7 @@ void Transceiver::driveControl(size_t chan)
     sscanf(buffer,"%3s %s %d",cmdcheck,command,&freqKhz);
     mRxFreq = freqKhz * 1e3;
     if (!mRadioInterface->tuneRx(mRxFreq, chan)) {
-       LOG(ALERT) << "RX failed to tune";
+       LOGP(DTRX, LOGL_ERROR, "RX failed to tune\n");
        sprintf(response,"RSP RXTUNE 1 %d",freqKhz);
     }
     else
@@ -830,7 +836,7 @@ void Transceiver::driveControl(size_t chan)
     sscanf(buffer,"%3s %s %d",cmdcheck,command,&freqKhz);
     mTxFreq = freqKhz * 1e3;
     if (!mRadioInterface->tuneTx(mTxFreq, chan)) {
-       LOG(ALERT) << "TX failed to tune";
+       LOGP(DTRX, LOGL_ERROR, "TX failed to tune\n");
        sprintf(response,"RSP TXTUNE 1 %d",freqKhz);
     }
     else
@@ -843,7 +849,7 @@ void Transceiver::driveControl(size_t chan)
     if ((TSC < 0) || (TSC > 7))
       sprintf(response, "RSP SETTSC 1 %d", TSC);
     else {
-      LOG(NOTICE) << "Changing TSC from " << mTSC << " to " << TSC;
+      LOGP(DTRX, LOGL_NOTICE,  "Changing TSC from %u to %u\n", mTSC, TSC);
       mTSC = TSC;
       sprintf(response,"RSP SETTSC 0 %d", TSC);
     }
@@ -854,7 +860,7 @@ void Transceiver::driveControl(size_t chan)
     int  timeslot;
     sscanf(buffer,"%3s %s %d %d",cmdcheck,command,&timeslot,&corrCode);
     if ((timeslot < 0) || (timeslot > 7)) {
-      LOG(WARNING) << "bogus message on control interface";
+      LOGP(DTRX, LOGL_ERROR, "Invalid slot %i requested\n", timeslot);
       sprintf(response,"RSP SETSLOT 1 %d %d",timeslot,corrCode);
       return;
     }     
@@ -872,8 +878,8 @@ void Transceiver::driveControl(size_t chan)
     sprintf(response,"RSP _SETBURSTTODISKMASK 0 %d",mask);
   }
   else {
-    LOG(WARNING) << "bogus command " << command << " on control interface.";
-    sprintf(response,"RSP ERR 1");
+    LOGP(DTRX, LOGL_ERROR, "bogus command %s on control interface\n", command);
+    sprintf(response, "RSP ERR 1");
   }
 
   mCtrlSockets[chan]->write(response, strlen(response) + 1);
@@ -895,7 +901,7 @@ bool Transceiver::driveTxPriorityQueue(size_t chan)
 
     burstLen = EDGE_BURST_NBITS;
   } else {
-    LOG(ERR) << "badly formatted packet on GSM->TRX interface";
+    LOGP(DTRX, LOGL_ERROR, "Badly formatted packet on GSM->TRX interface\n");
     return false;
   }
 
@@ -904,7 +910,9 @@ bool Transceiver::driveTxPriorityQueue(size_t chan)
   for (int i = 0; i < 4; i++)
     frameNum = (frameNum << 8) | (0x0ff & buffer[i+1]);
 
-  LOG(DEBUG) << "rcvd. burst at: " << GSM::Time(frameNum,timeSlot);
+  std::ostringstream ostream;
+  ostream << GSM::Time(frameNum,timeSlot);
+  LOGP(DTRX, LOGL_DEBUG, "Received burst at: %s\n", ostream.str().c_str());
   
   int RSSI = (int) buffer[5];
   BitVector newBurst(burstLen);
@@ -935,7 +943,9 @@ void Transceiver::driveReceiveRadio()
 void Transceiver::logRxBurst(size_t chan, SoftVector *burst, GSM::Time time, double dbm,
                              double rssi, double noise, double toa)
 {
-  LOG(DEBUG) << std::fixed << std::right
+  std::ostringstream ostream;
+
+  ostream << std::fixed << std::right
     << " chan: "   << chan
     << " time: "   << time
     << " RSSI: "   << std::setw(5) << std::setprecision(1) << rssi
@@ -943,7 +953,9 @@ void Transceiver::logRxBurst(size_t chan, SoftVector *burst, GSM::Time time, dou
     << " noise: "  << std::setw(5) << std::setprecision(1) << noise
                    << "dBFS/" << std::setw(6) << -(noise + rssiOffset) << "dBm"
     << " TOA: "    << std::setw(5) << std::setprecision(2) << toa
-    << " bits: "   << *burst;
+    << " bits: "   << *burst << std::endl;
+
+  LOGP(DTRX, LOGL_DEBUG, ostream.str().c_str());
 }
 
 void Transceiver::driveReceiveFIFO(size_t chan)
@@ -1004,12 +1016,13 @@ void Transceiver::driveTxFIFO()
       not have a burst, stick in filler data.
   */
 
-
+  std::ostringstream ostream;
   RadioClock *radioClock = (mRadioInterface->getClock());
-  
+
   if (mOn) {
     //radioClock->wait(); // wait until clock updates
-    LOG(DEBUG) << "radio clock " << radioClock->get();
+    ostream << radioClock->get();
+    LOGP(DTRX, LOGL_DEBUG, "radio clock %s\n", ostream.str().c_str());
     while (radioClock->get() + mTransmitLatency > mTransmitDeadlineClock) {
       // if underrun, then we're not providing bursts to radio/USRP fast
       //   enough.  Need to increase latency by one GSM frame.
@@ -1018,7 +1031,11 @@ void Transceiver::driveTxFIFO()
           // only update latency at the defined frame interval
           if (radioClock->get() > mLatencyUpdateTime + GSM::Time(USB_LATENCY_INTRVL)) {
             mTransmitLatency = mTransmitLatency + GSM::Time(1,0);
-            LOG(INFO) << "new latency: " << mTransmitLatency;
+
+            ostream.flush();
+            ostream << mTransmitLatency;
+            LOGP(DTRX, LOGL_INFO, "New latency: %s\n", ostream.str().c_str());
+
             mLatencyUpdateTime = radioClock->get();
           }
         }
@@ -1028,7 +1045,12 @@ void Transceiver::driveTxFIFO()
           if (mTransmitLatency > GSM::Time(USB_LATENCY_MIN)) {
               if (radioClock->get() > mLatencyUpdateTime + GSM::Time(216,0)) {
               mTransmitLatency.decTN();
-              LOG(INFO) << "reduced latency: " << mTransmitLatency;
+
+              ostream.flush();
+              ostream << mTransmitLatency;
+              LOGP(DTRX, LOGL_INFO,
+                   "Reduced latency: %s\n", ostream.str().c_str());
+
               mLatencyUpdateTime = radioClock->get();
             }
           }
@@ -1051,7 +1073,10 @@ void Transceiver::writeClockInterface()
   // FIXME -- This should be adaptive.
   sprintf(command,"IND CLOCK %llu",(unsigned long long) (mTransmitDeadlineClock.FN()+2));
 
-  LOG(INFO) << "ClockInterface: sending " << command;
+  std::ostringstream ostream;
+
+  ostream << command;
+  LOGP(DTRX, LOGL_INFO, "ClockInterface: sending %s\n", ostream.str().c_str());
 
   mClockSocket.write(command, strlen(command) + 1);
 

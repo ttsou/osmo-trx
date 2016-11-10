@@ -36,9 +36,7 @@ libcommon_la_SOURCES = \
 	Sockets.cpp \
 	Threads.cpp \
 	Timeval.cpp \
-	Logger.cpp \
-	URLEncode.cpp \
-	Utils.cpp
+	URLEncode.cpp
 
 noinst_PROGRAMS = \
 	BitVectorTest \
@@ -47,7 +45,6 @@ noinst_PROGRAMS = \
 	TimevalTest \
 	RegexpTest \
 	VectorTest \
-	LogTest \
 	URLEncodeTest \
 	F16Test
 
@@ -60,11 +57,8 @@ noinst_HEADERS = \
 	Timeval.h \
 	Regexp.h \
 	Vector.h \
-	Configuration.h \
 	F16.h \
-	URLEncode.h \
-	Utils.h \
-	Logger.h
+	URLEncode.h
 
 URLEncodeTest_SOURCES = URLEncodeTest.cpp
 URLEncodeTest_LDADD = libcommon.la
@@ -88,9 +82,6 @@ VectorTest_LDADD = libcommon.la
 
 RegexpTest_SOURCES = RegexpTest.cpp
 RegexpTest_LDADD = libcommon.la
-
-LogTest_SOURCES = LogTest.cpp
-LogTest_LDADD = libcommon.la
 
 F16Test_SOURCES = F16Test.cpp
 

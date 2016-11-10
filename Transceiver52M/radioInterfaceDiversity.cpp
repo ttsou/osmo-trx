@@ -18,12 +18,12 @@
  */
 
 #include <radioInterface.h>
-#include <Logger.h>
 
 #include "Resampler.h"
 
 extern "C" {
-#include "convert.h"
+#include "Logging.h"
+#include "common/convert.h"
 }
 
 /* Resampling parameters for 64 MHz clocking */
@@ -91,13 +91,14 @@ bool RadioInterfaceDiversity::setupDiversityChannels()
 
 	/* Inside buffer must hold at least 2 bursts */
 	if (inner_rx_len < 157 * mSPSRx * 2) {
-		LOG(ALERT) << "Invalid inner buffer size " << inner_rx_len;
+		LOGP(DTRX, LOGL_FATAL,
+		     "Invalid inner buffer size %zu\n", inner_rx_len);
 		return false;
 	}
 
 	dnsampler = new Resampler(resamp_inrate, resamp_outrate);
 	if (!dnsampler->init()) {
-		LOG(ALERT) << "Rx resampler failed to initialize";
+		LOGP(DTRX, LOGL_FATAL, "Rx resampler failed to initialize\n");
 		return false;
 	}
 
@@ -116,7 +117,8 @@ bool RadioInterfaceDiversity::init(int type)
 	int outer_rx_len;
 
 	if ((mMIMO != 2) || (mChans != 2)) {
-		LOG(ALERT) << "Unsupported channel configuration " << mChans;
+		LOGP(DTRX, LOGL_FATAL,
+		     "Unsupported channel configuration %zu\n", mChans);
 		return false;
 	}
 
@@ -188,7 +190,7 @@ void RadioInterfaceDiversity::pullBuffer()
 				  readTimestamp,
 				  &local_underrun);
 	if ((size_t) num != resamp_outchunk) {
-		LOG(ALERT) << "Receive error " << num;
+		LOGP(DTRX, LOGL_FATAL, "Receive I/O error %zu\n", num);
 		return;
 	}
 
@@ -212,7 +214,8 @@ void RadioInterfaceDiversity::pullBuffer()
 		rc = dnsampler->rotate(in, resamp_outchunk,
 				       out, resamp_inchunk);
 		if (rc < 0) {
-			LOG(ALERT) << "Sample rate downsampling error";
+			LOGP(DTRX, LOGL_FATAL,
+			     "Sample rate downsampling failed\n");
 		}
 
 		/* Enable path 2 if Nyquist bandwidth is sufficient */
@@ -226,13 +229,14 @@ void RadioInterfaceDiversity::pullBuffer()
 
 		rate = i ? -rate : rate;
 		if (!frequencyShift(shift, base, rate, phases[i], &phases[i])) {
-			LOG(ALERT) << "Frequency shift failed";
+			LOGP(DTRX, LOGL_FATAL, "Frequency shift failed\n");
 		}
 
 		rc = dnsampler->rotate(in, resamp_outchunk,
 				       out, resamp_inchunk);
 		if (rc < 0) {
-			LOG(ALERT) << "Sample rate downsampling error";
+			LOGP(DTRX, LOGL_FATAL,
+			     "Sample rate downsampling failed\n");
 		}
 
 		delete shift;

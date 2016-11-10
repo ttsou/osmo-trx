@@ -25,10 +25,10 @@
 #include <string.h>
 #include <cstdio>
 
-#include "Logger.h"
 #include "ChannelizerBase.h"
 
 extern "C" {
+#include "Logging.h"
 #include "common/fft.h"
 }
 
@@ -143,7 +143,7 @@ bool ChannelizerBase::initFFT()
 	memset(fftOutput, 0, size);
 
 	if (!fftInput | !fftOutput) {
-		LOG(ALERT) << "Memory allocation error";
+		LOGP(DDSP, LOGL_FATAL, "Memory allocation error\n");
 		return false;
 	}
 
@@ -155,7 +155,7 @@ bool ChannelizerBase::initFFT()
 bool ChannelizerBase::mapBuffers()
 {
 	if (!fftHandle) {
-		LOG(ALERT) << "FFT buffers not initialized";
+		LOGP(DDSP, LOGL_FATAL, "FFT buffers not initialized\n");
 		return false;
 	}
 
@@ -182,7 +182,7 @@ bool ChannelizerBase::init()
 	 * rate conversion blocks
 	 */
 	if (!initFilters()) {
-		LOG(ALERT) << "Failed to initialize channelizing filter";
+		LOGP(DDSP, LOGL_FATAL, "Failed to initialize channelizing filter\n");
 		return false;
 	}
 
@@ -193,7 +193,7 @@ bool ChannelizerBase::init()
 	}
 
 	if (!initFFT()) {
-		LOG(ALERT) << "Failed to initialize FFT";
+		LOGP(DDSP, LOGL_FATAL, "Failed to initialize FFT\n");
 		return false;
 	}
 
@@ -206,14 +206,16 @@ bool ChannelizerBase::init()
 bool ChannelizerBase::checkLen(size_t innerLen, size_t outerLen)
 {
 	if (outerLen != innerLen * m) {
-		LOG(ALERT) << "Invalid outer length " << innerLen
-			   <<  " is not multiple of " << blockLen;
+		LOGP(DDSP, LOGL_FATAL,
+		     "Invalid outer length %zu is not multiple of %zu\n",
+		     innerLen, blockLen);
 		return false;
 	}
 
 	if (innerLen != blockLen) {
-		LOG(ALERT) << "Invalid inner length " << outerLen
-			   <<  " does not equal " << blockLen;
+		LOGP(DDSP, LOGL_FATAL,
+		     "Invalid inner length %zu does not equal %zu\n",
+		     outerLen, blockLen);
 		return false;
 	}
 

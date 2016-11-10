@@ -27,9 +27,15 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sstream>
+#include <string>
 
 #include <GSMCommon.h>
-#include <Logger.h>
+
+extern "C" {
+#include <osmocom/core/logging.h>
+#include "Logging.h"
+};
 
 /* Samples-per-symbol for downlink path
  *     4 - Uses precision modulator (more computation, less distortion)
@@ -148,7 +154,7 @@ bool trx_setup_config(struct trx_config *config)
 	ost << "   Tuning offset........... " << config->offset << std::endl;
 	ost << "   RSSI to dBm offset...... " << config->rssi_offset << std::endl;
 	ost << "   Swap channels........... " << config->swap_channels << std::endl;
-	std::cout << ost << std::endl;
+	std::cout << ost.str() << std::endl;
 
 	return true;
 }
@@ -186,12 +192,12 @@ RadioInterface *makeRadioInterface(struct trx_config *config,
 						config->rx_sps, config->chans);
 		break;
 	default:
-		LOG(ALERT) << "Unsupported radio interface configuration";
+		LOGP(DDEV, LOGL_ERROR, "Unsupported radio interface configuration");
 		return NULL;
 	}
 
 	if (!radio->init(type)) {
-		LOG(ALERT) << "Failed to initialize radio interface";
+		LOGP(DDEV, LOGL_ERROR, "Failed to initialize radio interface");
 		return NULL;
 	}
 
@@ -214,7 +220,7 @@ Transceiver *makeTransceiver(struct trx_config *config, RadioInterface *radio)
 			      GSM::Time(3,0), radio, config->rssi_offset);
 	if (!trx->init(config->filler, config->rtsc,
 		       config->rach_delay, config->edge)) {
-		LOG(ALERT) << "Failed to initialize transceiver";
+		LOGP(DTRX, LOGL_ERROR, "Failed to initialize transceiver");
 		delete trx;
 		return NULL;
 	}
@@ -224,7 +230,7 @@ Transceiver *makeTransceiver(struct trx_config *config, RadioInterface *radio)
 		if (fifo && trx->receiveFIFO(fifo, i))
 			continue;
 
-		LOG(ALERT) << "Could not attach FIFO to channel " << i;
+		LOGP(DTRX, LOGL_ERROR, "Could not attach FIFO to channel %u", i);
 		delete trx;
 		return NULL;
 	}
@@ -293,7 +299,7 @@ static void handle_options(int argc, char **argv, struct trx_config *config)
 	config->rssi_offset = 0.0;
 	config->swap_channels = false;
 	config->edge = false;
-	config->log_level = "NOTICE"
+	config->log_level = "NOTICE";
 	config->port = DEFAULT_TRX_PORT;
 	config->addr = DEFAULT_TRX_IP;
 	config->extref = DEFAULT_EXTREF;
@@ -435,16 +441,19 @@ int main(int argc, char *argv[])
 
 	setup_signal_handlers();
 
+	/* Setup loggin */
+	trx_log_init(NULL);
+
 	/* Check database sanity */
 	if (!trx_setup_config(&config)) {
 		std::cerr << "Configuration invalid - exiting" << std::endl;
 		return EXIT_FAILURE;
 	}
 
-	if (!gLogInit("transceiver", config.log_level.c_str(), LOG_LOCAL7)) {
-		std::cerr << "Logging initialization failed" << std::endl;
-		return EXIT_FAILURE;
-	}
+//	if (!gLogInit("transceiver", config.log_level.c_str(), LOG_LOCAL7)) {
+//		std::cerr << "Logging initialization failed" << std::endl;
+//		return EXIT_FAILURE;
+//	}
 
 	srandom(time(NULL));
 
@@ -463,7 +472,7 @@ int main(int argc, char *argv[])
 				 config.chans, config.offset);
 	type = usrp->open(config.dev_args, ref, config.swap_channels);
 	if (type < 0) {
-		LOG(ALERT) << "Failed to create radio device" << std::endl;
+		LOGP(DDEV, LOGL_ERROR, "Failed to create radio device\n");
 		goto shutdown;
 	}
 

@@ -21,10 +21,11 @@
 
 #include "radioInterface.h"
 #include "Resampler.h"
-#include <Logger.h>
 
 extern "C" {
-#include "convert.h"
+#include <osmocom/core/logging.h>
+#include "common/convert.h"
+#include "Logging.h"
 }
 
 #define CHUNK		625
@@ -48,7 +49,7 @@ RadioInterface::~RadioInterface(void)
 bool RadioInterface::init(int type)
 {
   if ((type != RadioDevice::NORMAL) || (mMIMO > 1) || !mChans) {
-    LOG(ALERT) << "Invalid configuration";
+    LOGP(DTRX, LOGL_ERROR, "Invalid configuration");
     return false;
   }
 
@@ -95,7 +96,7 @@ int RadioInterface::setPowerAttenuation(int atten, size_t chan)
   double rfGain, digAtten;
 
   if (chan >= mChans) {
-    LOG(ALERT) << "Invalid channel requested";
+    LOGP(DTRX, LOGL_ERROR, "Invalid channel requested");
     return -1;
   }
 
@@ -127,7 +128,7 @@ int RadioInterface::radioifyVector(signalVector &wVector,
 int RadioInterface::unRadioifyVector(signalVector *newVector, size_t chan)
 {
   if (newVector->size() > recvBuffer[chan]->getAvailSamples()) {
-    LOG(ALERT) << "Insufficient number of samples in receive buffer";
+    LOGP(DTRX, LOGL_ERROR, "Insufficient number of samples in receive buffer");
     return -1;
   }
 
@@ -151,7 +152,7 @@ bool RadioInterface::start()
   if (mOn)
     return true;
 
-  LOG(INFO) << "Starting radio device";
+  LOGP(DTRX, LOGL_NOTICE, "Starting radio device");
 #ifdef USRP1
   mAlignRadioServiceLoopThread.start((void * (*)(void*))AlignRadioServiceLoopAdapter,
                                      (void*)this);
@@ -172,7 +173,7 @@ bool RadioInterface::start()
   mRadio->updateAlignment(writeTimestamp-10000);
 
   mOn = true;
-  LOG(INFO) << "Radio started";
+  LOGP(DTRX, LOGL_NOTICE, "Radio started");
   return true;
 }
 
@@ -320,7 +321,7 @@ void RadioInterface::pullBuffer()
                                 &local_underrun);
 
   if (numRecv != segmentLen) {
-          LOG(ALERT) << "Receive error " << numRecv;
+          LOGP(DDEV, LOGL_ERROR, "Receive error %u", numRecv);
           return;
   }
 

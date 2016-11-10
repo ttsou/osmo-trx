@@ -25,10 +25,10 @@
 #include <string.h>
 #include <cstdio>
 
-#include "Logger.h"
 #include "Channelizer.h"
 
 extern "C" {
+#include "Logging.h"
 #include "common/fft.h"
 #include "common/convolve.h"
 }
