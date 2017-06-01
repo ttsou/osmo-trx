@@ -112,7 +112,7 @@ struct CorrelationSequence {
 struct PulseSequence {
   PulseSequence() : c0(NULL), c1(NULL), c2(NULL), c3(NULL), c0_inv(NULL), empty(NULL),
                     c0_buffer(NULL), c1_buffer(NULL), c2_buffer(NULL),
-                    c3_buffer(NULL), c0_inv_buffer(NULL)
+                    c3_buffer(NULL), c0_inv_buffer(NULL), g(NULL)
   {
   }
 
@@ -124,6 +124,7 @@ struct PulseSequence {
     delete c3;
     delete c0_inv;
     delete empty;
+    delete g;
     free(c0_buffer);
     free(c1_buffer);
     free(c2_buffer);
@@ -141,6 +142,7 @@ struct PulseSequence {
   void *c2_buffer;
   void *c3_buffer;
   void *c0_inv_buffer;
+  signalVector *g;
 };
 
 static CorrelationSequence *gMidambles[] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
@@ -539,6 +541,49 @@ static bool generateInvertC0Pulse(PulseSequence *pulse)
   return true;
 }
 
+static bool generateGPulse(int sps, PulseSequence *pulse)
+{
+  int len;
+
+  if (!pulse)
+    return false;
+
+  switch (sps) {
+  case 4:
+    len = 12;
+    break;
+  default:
+    return false;
+  }
+
+  pulse->g = new signalVector(len);
+  pulse->g->isReal(true);
+
+  /* Enable alignment for SSE usage */
+  pulse->c3->setAligned(true);
+
+  signalVector::iterator xP = pulse->g->begin();
+
+  switch (sps) {
+  case 4:
+    *xP++ = 9.36941412e-03;
+    *xP++ = 3.08922969e-02;
+    *xP++ = 7.76167091e-02;
+    *xP++ = 1.50953651e-01;
+    *xP++ = 2.31509315e-01;
+    *xP++ = 2.85056778e-01;
+    *xP++ = 2.85056778e-01;
+    *xP++ = 2.31509315e-01;
+    *xP++ = 1.50953651e-01;
+    *xP++ = 7.76167091e-02;
+    *xP++ = 3.08922969e-02;
+    *xP++ = 9.36941412e-03;
+    break;
+  }
+
+  return true;
+}
+
 static bool generateC3Pulse(int sps, PulseSequence *pulse)
 {
   int len;
@@ -711,6 +756,7 @@ static PulseSequence *generateGSMPulse(int sps)
     generateC1Pulse(sps, pulse);
     generateC2Pulse(sps, pulse);
     generateC3Pulse(sps, pulse);
+    generateGPulse(sps, pulse);
   } else {
     center = (float) (len - 1.0) / 2.0;
 
@@ -809,6 +855,54 @@ static void rotateBurst2(signalVector &burst, double phase)
 
   for (size_t i = 0; i < burst.size(); i++)
     burst[i] = burst[i] * rot;
+}
+
+static signalVector *modulateBurstDirect(const BitVector &bits)
+{
+  auto sps = 4;
+  auto burst = new signalVector(625);
+  auto it = burst->begin();
+  burst->isReal(true);
+
+  /* Leading differential bit */
+  *it = 2.0 * (bits[0] & 0x01) - 1.0;
+  it += sps;
+
+   /* Main burst bits */
+  for (size_t i = 1; i < bits.size(); i++) {
+    *it = 2.0 * ((bits[i-1] & 0x01) ^ (bits[i] & 0x01)) - 1.0;
+    it += sps;
+  }
+
+  /* Trailing differential bit */
+  *it = 2.0 * (bits[bits.size()-1] & 0x01) - 1.0;
+
+  auto shaped = convolve(burst, GSMPulse4->g, NULL, START_ONLY);
+  auto rotate = new signalVector(shaped->size());
+
+  auto itr = rotate->begin();
+  auto its = shaped->begin();
+  double accum = 0.0;
+  while (itr != rotate->end()) {
+    *itr++ = Complex<float>(cos(accum), sin(accum));
+    accum -= its++->real();
+  }
+
+  /*
+   * Hack off guard interval at start and end
+   *   These values make E4406A happy with TSC detection
+   */
+  itr = rotate->end() - 25;
+  while (itr != rotate->end())
+    *itr++ = Complex<float>(0, 0);
+
+  itr = rotate->begin();
+  while (itr != rotate->begin() + 1)
+    *itr++ = Complex<float>(0, 0);
+
+  delete burst;
+  delete shaped;
+  return rotate;
 }
 
 /*
@@ -1272,7 +1366,7 @@ signalVector *modulateBurst(const BitVector &wBurst, int guardPeriodLength,
   if (emptyPulse)
     return rotateBurst(wBurst, guardPeriodLength, sps);
   else if (sps == 4)
-    return modulateBurstLaurent(wBurst);
+    return modulateBurstDirect(wBurst);
   else
     return modulateBurstBasic(wBurst, guardPeriodLength, sps);
 }
