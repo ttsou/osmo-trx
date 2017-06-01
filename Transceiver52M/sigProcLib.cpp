@@ -110,8 +110,9 @@ struct CorrelationSequence {
  * for SSE instructions.
  */
 struct PulseSequence {
-  PulseSequence() : c0(NULL), c1(NULL), c0_inv(NULL), empty(NULL),
-		    c0_buffer(NULL), c1_buffer(NULL), c0_inv_buffer(NULL)
+  PulseSequence() : c0(NULL), c1(NULL), c2(NULL), c3(NULL), c0_inv(NULL), empty(NULL),
+                    c0_buffer(NULL), c1_buffer(NULL), c2_buffer(NULL),
+                    c3_buffer(NULL), c0_inv_buffer(NULL)
   {
   }
 
@@ -119,18 +120,26 @@ struct PulseSequence {
   {
     delete c0;
     delete c1;
+    delete c2;
+    delete c3;
     delete c0_inv;
     delete empty;
     free(c0_buffer);
     free(c1_buffer);
+    free(c2_buffer);
+    free(c3_buffer);
   }
 
   signalVector *c0;
   signalVector *c1;
+  signalVector *c2;
+  signalVector *c3;
   signalVector *c0_inv;
   signalVector *empty;
   void *c0_buffer;
   void *c1_buffer;
+  void *c2_buffer;
+  void *c3_buffer;
   void *c0_inv_buffer;
 };
 
@@ -530,6 +539,78 @@ static bool generateInvertC0Pulse(PulseSequence *pulse)
   return true;
 }
 
+static bool generateC3Pulse(int sps, PulseSequence *pulse)
+{
+  int len;
+
+  if (!pulse)
+    return false;
+
+  switch (sps) {
+  case 4:
+    len = 4;
+    break;
+  default:
+    return false;
+  }
+
+  pulse->c3_buffer = convolve_h_alloc(len);
+  pulse->c3 = new signalVector((complex *) pulse->c3_buffer, 0, len);
+  pulse->c3->isReal(true);
+
+  /* Enable alignment for SSE usage */
+  pulse->c3->setAligned(true);
+
+  signalVector::iterator xP = pulse->c3->begin();
+
+  switch (sps) {
+  case 4:
+    /* BT = 0.30 */
+    *xP++ = 0.0;
+    *xP++ = 9.66809925e-04;
+    *xP++ = 1.14560468e-03;
+    *xP++ = 5.28599308e-04;
+  }
+
+  return true;
+}
+
+static bool generateC2Pulse(int sps, PulseSequence *pulse)
+{
+  int len;
+
+  if (!pulse)
+    return false;
+
+  switch (sps) {
+  case 4:
+    len = 4;
+    break;
+  default:
+    return false;
+  }
+
+  pulse->c2_buffer = convolve_h_alloc(len);
+  pulse->c2 = new signalVector((complex *) pulse->c2_buffer, 0, len);
+  pulse->c2->isReal(true);
+
+  /* Enable alignment for SSE usage */
+  pulse->c2->setAligned(true);
+
+  signalVector::iterator xP = pulse->c2->begin();
+
+  switch (sps) {
+  case 4:
+    /* BT = 0.30 */
+    *xP++ = 0.0;
+    *xP++ = 5.28599308e-04;
+    *xP++ = 1.14560468e-03;
+    *xP++ = 9.66809925e-04;
+  }
+
+  return true;
+}
+
 static bool generateC1Pulse(int sps, PulseSequence *pulse)
 {
   int len;
@@ -628,6 +709,8 @@ static PulseSequence *generateGSMPulse(int sps)
     *xP++ = 2.84385729e-02;
     *xP++ = 4.46348606e-03;
     generateC1Pulse(sps, pulse);
+    generateC2Pulse(sps, pulse);
+    generateC3Pulse(sps, pulse);
   } else {
     center = (float) (len - 1.0) / 2.0;
 
@@ -737,12 +820,15 @@ static signalVector *modulateBurstLaurent(const BitVector &bits)
 {
   int burst_len, sps = 4;
   float phase;
-  signalVector *c0_pulse, *c1_pulse, *c0_burst;
-  signalVector *c1_burst, *c0_shaped, *c1_shaped;
-  signalVector::iterator c0_itr, c1_itr;
+  signalVector *c0_pulse, *c1_pulse, *c2_pulse, *c3_pulse,
+               *c0_burst, *c1_burst, *c2_burst, *c3_burst,
+               *c0_shaped, *c1_shaped, *c2_shaped, *c3_shaped;
+  signalVector::iterator c0_itr, c1_itr, c2_itr, c3_itr;
 
   c0_pulse = GSMPulse4->c0;
   c1_pulse = GSMPulse4->c1;
+  c2_pulse = GSMPulse4->c2;
+  c3_pulse = GSMPulse4->c3;
 
   if (bits.size() > 156)
     return NULL;
@@ -750,12 +836,20 @@ static signalVector *modulateBurstLaurent(const BitVector &bits)
   burst_len = 625;
 
   c0_burst = new signalVector(burst_len, c0_pulse->size());
-  c0_burst->isReal(true);
+  c0_burst->isReal(false);
   c0_itr = c0_burst->begin();
 
   c1_burst = new signalVector(burst_len, c1_pulse->size());
-  c1_burst->isReal(true);
+  c1_burst->isReal(false);
   c1_itr = c1_burst->begin();
+
+  c2_burst = new signalVector(burst_len, c2_pulse->size());
+  c2_burst->isReal(false);
+  c2_itr = c2_burst->begin();
+
+  c3_burst = new signalVector(burst_len, c3_pulse->size());
+  c3_burst->isReal(false);
+  c3_itr = c3_burst->begin();
 
   /* Padded differential tail bits */
   *c0_itr = 2.0 * (0x00 & 0x01) - 1.0;
@@ -774,43 +868,83 @@ static signalVector *modulateBurstLaurent(const BitVector &bits)
   GMSKRotate(*c0_burst, sps);
   c0_burst->isReal(false);
 
+  /* Generate C1, C2, C3 phase coefficients */
   c0_itr = c0_burst->begin();
   c0_itr += sps * 2;
   c1_itr += sps * 2;
+  c2_itr += sps * 2;
+  c3_itr += sps * 2;
 
-  /* Start magic */
-  phase = 2.0 * ((0x01 & 0x01) ^ (0x01 & 0x01)) - 1.0;
-  *c1_itr = *c0_itr * Complex<float>(0, phase);
+  /* Bit 0 */
+  auto p1 = bits[0] & 0x01;
+  auto p2 = 0;
+  auto p3 = p1 ^ p2;
+
+  *c1_itr = *c0_itr * Complex<float>(0, 2.0 * p1 - 1.0);
+  *c2_itr = *c0_itr * Complex<float>(0, 2.0 * p2 - 1.0);
+  *c3_itr = *c0_itr * Complex<float>(2.0 * p3 - 1.0, 0);
+
   c0_itr += sps;
   c1_itr += sps;
+  c2_itr += sps;
+  c3_itr += sps;
 
-  /* Generate C1 phase coefficients */
-  for (unsigned i = 2; i < bits.size(); i++) {
-    phase = 2.0 * ((bits[i - 1] & 0x01) ^ (bits[i - 2] & 0x01)) - 1.0;
-    *c1_itr = *c0_itr * Complex<float>(0, phase);
+  /* Bit 1 */
+  p1 = (bits[1] & 0x01) ^ (bits[0] & 0x01);
+  p2 = (bits[0] & 0x01);
+  p3 = p1 ^ p2;
+
+  *c1_itr = *c0_itr * Complex<float>(0, 2.0 * p1 - 1.0);
+  *c2_itr = *c0_itr * Complex<float>(0, 2.0 * p2 - 1.0);
+  *c3_itr = *c0_itr * Complex<float>(2.0 * p3 - 1.0, 0);
+
+  c0_itr += sps;
+  c1_itr += sps;
+  c2_itr += sps;
+  c3_itr += sps;
+
+  /* Bit 2 - end */
+  for (size_t i = 3; i < bits.size(); i++) {
+    p1 = (bits[i-1] & 0x01) ^ (bits[i-2] & 0x01);
+    p2 = (bits[i-2] & 0x01) ^ (bits[i-3] & 0x01);
+    p3 = p1 ^ p2;
+
+    *c1_itr = *c0_itr * Complex<float>(0, 2.0 * p1 - 1.0);
+    *c2_itr = *c0_itr * Complex<float>(0, 2.0 * p2 - 1.0);
+    *c3_itr = *c0_itr * Complex<float>(2.0 * p3 - 1.0, 0);
 
     c0_itr += sps;
     c1_itr += sps;
+    c2_itr += sps;
+    c3_itr += sps;
   }
 
-  /* End magic */
+  /* Residual bits (unfinished) */
   int i = bits.size();
   phase = 2.0 * ((bits[i-1] & 0x01) ^ (bits[i-2] & 0x01)) - 1.0;
   *c1_itr = *c0_itr * Complex<float>(0, phase);
 
-  /* Primary (C0) and secondary (C1) pulse shaping */
+  /* Pulse shape all component functions */
   c0_shaped = convolve(c0_burst, c0_pulse, NULL, START_ONLY);
   c1_shaped = convolve(c1_burst, c1_pulse, NULL, START_ONLY);
+  c2_shaped = convolve(c2_burst, c2_pulse, NULL, START_ONLY);
+  c3_shaped = convolve(c3_burst, c3_pulse, NULL, START_ONLY);
 
-  /* Sum shaped outputs into C0 */
+  /* Combine shaped outputs into C0 */
   c0_itr = c0_shaped->begin();
   c1_itr = c1_shaped->begin();
+  c2_itr = c2_shaped->begin();
+  c3_itr = c3_shaped->begin();
   for (unsigned i = 0; i < c0_shaped->size(); i++ )
-    *c0_itr++ += *c1_itr++;
+    *c0_itr++ += *c1_itr++ + *c2_itr++ + *c3_itr++;
 
   delete c0_burst;
   delete c1_burst;
+  delete c2_burst;
+  delete c3_burst;
   delete c1_shaped;
+  delete c2_shaped;
+  delete c3_shaped;
 
   return c0_shaped;
 }

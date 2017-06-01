@@ -9,6 +9,8 @@
 % Author: Thomas Tsou <tom@tsou.cc>
 %
 
+pkg load communications
+
 % Modulation parameters
 oversamp = 16;
 L = 3;
@@ -60,6 +62,12 @@ c2 = s(1:end-(oversamp*(5)));
 c2 = c2 .* s((1 + 1*oversamp):end-(oversamp*(5 - 1 - 0)));
 c2 = c2 .* s((1 + 5*oversamp):end-(oversamp*(5 - 1 - 4)));
 
+% Compute C3 pulse: valid for L = 3 only!
+%   C3 = S0 * S4 * S5
+c3 = s(1:end-(oversamp*(5)));
+c3 = c3 .* s((1 + 4*oversamp):end-(oversamp*(5 - 1 - 3)));
+c3 = c3 .* s((1 + 5*oversamp):end-(oversamp*(5 - 1 - 4)));
+
 % Plot C0, C1, C2 Laurent pulse series
 figure(1);
 hold off;
@@ -67,6 +75,7 @@ plot((0:size(c0,2)-1)/oversamp - 2,c0, 'b');
 hold on;
 plot((0:size(c1,2)-1)/oversamp - 2,c1, 'r');
 plot((0:size(c2,2)-1)/oversamp - 2,c2, 'g');
+plot((0:size(c3,2)-1)/oversamp - 2,c3, 'm');
 
 % Generate OpenBTS pulse
 numSamples = size(c0,2); 
