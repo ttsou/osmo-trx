@@ -435,6 +435,7 @@ void Transceiver::setModulus(size_t timeslot, size_t chan)
   case II:
   case III:
   case FILL:
+  case IGPRS:
     state->fillerModulus[timeslot] = 26;
     break;
   case IV:
@@ -475,6 +476,7 @@ CorrType Transceiver::expectedCorrType(GSM::Time currTime,
   case FILL:
     return IDLE;
     break;
+  case IGPRS:
   case I:
     // TODO: Are we expecting RACH on an IDLE frame?
 /*    if (burstFN % 26 == 25)
